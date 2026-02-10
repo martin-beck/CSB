@@ -154,9 +154,8 @@ bm_target_reg(thread_ctx_t *ctx, size_t tid)
         fd_trunc = 0;
     }
 
-    // TODO: Use length value from syzkaller target specification
     ctx->mmap_offsets_min_mysql_newfstatat_openat_0_1_prog =
-        (uintptr_t)(void *)mmap(NULL, 0x1000000ul,
+        (uintptr_t)(void *)mmap(NULL, MMAP_LENGTH,
                                 PROT_WRITE | PROT_READ | PROT_EXEC,
                                 MAP_ANONYMOUS | MAP_PRIVATE, (intptr_t)-1, 0ul);
     if (ctx->mmap_offsets_min_mysql_newfstatat_openat_0_1_prog == -1) {

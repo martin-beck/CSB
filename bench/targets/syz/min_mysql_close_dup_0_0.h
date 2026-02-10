@@ -19,6 +19,7 @@
 #define UNIQUE_STR_STR(str) #str
 #define UNIQUE_STR() UNIQUE_STR_STR(RESOLVE(UNIQUE_ID))
 #define MMAP_OFFSET 0x20000000ul
+#define MMAP_LENGTH 0x1000000ul
 
 #include <endian.h>
 #include <errno.h>
