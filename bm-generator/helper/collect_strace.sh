@@ -1,8 +1,8 @@
+#!/bin/bash
 # Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 # SPDX-License-Identifier: MIT
 
-#!/bin/bash 
- 
+
  : ${FILE_LOG:="strace.log"}
 
 if [ -z "`command -v strace`" ]; then
