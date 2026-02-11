@@ -14,7 +14,7 @@ if [ $# -lt 1 ]; then
 fi
 
 if [ -f "${FILE_LOG}" ]; then
-  echo "Output file \"${FILE_LOG}\" already exists. (re)move of use a different output file name. Example:"
+  echo "Output file \"${FILE_LOG}\" already exists. (re)move it, or use a different output file name. Example:"
   echo "  FILE_LOG=strace_output.log $0 $@"
   exit 1
 fi
