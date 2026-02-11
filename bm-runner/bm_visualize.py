@@ -391,6 +391,12 @@ def create_linearity_plot(df: DataFrame, plot: PlotConfig, dir):
                 )
                 return
             one_avg = one_eu[0]
+            if one_avg == 0.0:
+                bm_log(
+                    "Cannot generate linearity plot. Result for 1 container is 0.0, avoiding division by zero.",
+                    LogType.ERROR,
+                )
+                return
             # calculate linearity
             lin = n_avg / one_avg
             # add a row to the data frame
