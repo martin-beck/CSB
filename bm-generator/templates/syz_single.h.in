@@ -6,7 +6,9 @@
 
 #include <CSB/bm_target.h>
 #include <CSB/bm_helper.h>
+#include <endian.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
@@ -16,8 +18,13 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define BM_CTX_TID (ctx->tid)
+#define BASE_PORT_CONNECT 36721
+#define BASE_PORT_BIND 46721
 
 $_begin(NNOPS = [[1]]);
 #define NOP_PER_OP NNOPS
@@ -37,6 +44,8 @@ $_begin(NN = [[1; 2]]);
     int   num_succeeded_NN_prog;
     int   num_failed_NN_prog;
     uintptr_t mmap_offsets_NN_prog;
+    struct sockaddr_in *connect_arg_NN_prog;
+    struct sockaddr_in *bind_arg_NN_prog;
 $_end();
 };
 
@@ -106,9 +115,31 @@ static inline void
 bm_target_init(size_t init_size, size_t num_threads)
 {
     V_UNUSED(init_size, num_threads);
+    int numNetOps = 0;
+    char* netOpsArgs[1024];
+    int netOpsArgsIdx = 0;
 $_begin(NN = [[1; 2]]);
     op_name_tbl[0] = "NN";
+
+    numNetOps = sizeof(netops_NN_prog)/sizeof(char*);
+    for (int i=0; i<numNetOps; i++) {
+        netOpsArgs[netOpsArgsIdx] = (char*)netops_NN_prog[i];
+        netOpsArgsIdx++;
+    }
 $_end();
+    char pattern_args[4096];
+    int pattern_args_idx = 0;
+    for (int i=0; i<netOpsArgsIdx; i++) {
+        pattern_args_idx += snprintf(pattern_args+pattern_args_idx, sizeof(pattern_args)-pattern_args_idx, "-P%s ", netOpsArgs[i]);
+    }
+    pattern_args[pattern_args_idx] = '\0';
+
+    char server_command[4096];
+    int server_command_len = snprintf(server_command, 4096, "server -p36721 -w1024 -r1024 -W1024 %s", pattern_args);
+    server_command[server_command_len] = '\0';
+    if (netOpsArgsIdx > 0) {
+        fprintf(stderr, "Server command: %s\n", server_command);
+    }
 }
 
 static inline void
@@ -151,6 +182,19 @@ $_begin(NN = [[1; 2]]);
 
     assert(ctx->mmap_offsets_NN_prog);
 
+    struct sockaddr_in* saddr_con = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
+    ctx->connect_arg_NN_prog = saddr_con;
+    saddr_con->sin_family = AF_INET;
+    saddr_con->sin_port = htons(BASE_PORT_CONNECT);
+    inet_aton("127.0.0.1", &saddr_con->sin_addr);
+
+    struct sockaddr_in* saddr_bind = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
+    ctx->bind_arg_NN_prog = saddr_bind;
+    saddr_bind->sin_family = AF_INET;
+    saddr_bind->sin_port = htons(BASE_PORT_BIND);
+    inet_aton("0.0.0.0", &saddr_bind->sin_addr);
+
+    // EVERYTHING MUT BE INITIALIZED BEFORE
     // do one warmup iteration to allocate memory in mmap
     bm_dispatch_operation_NN_prog(ctx, 0);
 
@@ -167,7 +211,9 @@ bm_target_dereg(thread_ctx_t *ctx, size_t tid)
 $_begin(NN = [[1; 2]]);
     // rm_tmpdir_NN_prog(ctx);
     free(ctx->tmpdir_NN_prog);
+    // free(ctx->connect_arg_NN_prog);
     ctx->tmpdir_NN_prog = NULL;
+    // ctx->connect_arg_NN_prog = NULL;
 $_end();
 
     V_UNUSED(ctx, tid);
