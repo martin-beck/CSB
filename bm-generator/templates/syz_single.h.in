@@ -23,7 +23,7 @@
 #include <arpa/inet.h>
 
 #define BM_CTX_TID (ctx->tid)
-#define BASE_PORT_CONNECT 36721
+#define BASE_PORT_CON 36721
 #define BASE_PORT_BIND 46721
 
 $_begin(NNOPS = [[1]]);
@@ -185,7 +185,7 @@ $_begin(NN = [[1; 2]]);
     struct sockaddr_in* saddr_con = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
     ctx->connect_arg_NN_prog = saddr_con;
     saddr_con->sin_family = AF_INET;
-    saddr_con->sin_port = htons(BASE_PORT_CONNECT);
+    saddr_con->sin_port = htons(BASE_PORT_CON);
     inet_aton("127.0.0.1", &saddr_con->sin_addr);
 
     struct sockaddr_in* saddr_bind = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
