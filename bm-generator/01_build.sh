@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# SPDX-License-Identifier: MIT
+
 
 GOBIN="`go env GOBIN`"
 
@@ -15,9 +18,9 @@ SCRIPT_SYZ_SRC="helper/find_syzkaller_src.sh"
  : ${DIR_SYZ_SRC:=$(${SCRIPT_SYZ_SRC})}
 
 if [ ! -d "${DIR_SYZ_SRC}" ]; then
-  echo "syzkaller source dir not found. Running:"
-  echo "  cmake -S. -Bbuild"
-  cmake -S. -Bbuild
+  echo "syzkaller source dir not found."
+  echo "  Building syzkaller with cmake ..."
+  cmake -S../ -B../build -DCSB_BM_GENERATOR=ON
   DIR_SYZ_SRC=$(${SCRIPT_SYZ_SRC})
   if [ ! -d "${DIR_SYZ_SRC}" ]; then
     echo "Failed setting up syzkaller sources."
@@ -27,4 +30,4 @@ if [ ! -d "${DIR_SYZ_SRC}" ]; then
   fi
 fi
 
-cmake --build build
+cmake --build ../build --target syzkaller
