@@ -15,7 +15,7 @@ message(STATUS "Fetching syzkaller ...")
 FetchContent_Declare(
   syzkaller
   GIT_REPOSITORY https://github.com/martin-beck/syzkaller.git
-  GIT_TAG a4eebe883f3a0fff811fc76061671b174820fcf6
+  GIT_TAG martin/network-client-side-init
   GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(syzkaller)
