@@ -18,8 +18,7 @@ if [ ! -d "${DIR_SYZ_SRC}" ]; then
   echo "syzkaller source dir not found. Running:"
   echo "  cmake -S. -Bbuild"
   cmake -S. -Bbuild
-  cmake --build build
- DIR_SYZ_SRC=$(${SCRIPT_SYZ_SRC})
+  DIR_SYZ_SRC=$(${SCRIPT_SYZ_SRC})
   if [ ! -d "${DIR_SYZ_SRC}" ]; then
     echo "Failed setting up syzkaller sources."
     echo "If the syzkaller source dir is not beneath $(pwd)/build, then run this script as:"
@@ -27,3 +26,5 @@ if [ ! -d "${DIR_SYZ_SRC}" ]; then
     exit 1
   fi
 fi
+
+cmake --build build
