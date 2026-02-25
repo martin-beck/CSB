@@ -12,8 +12,8 @@ if(CSB_SYZKALLER_FETCH)
     # An alternative to using syzkaller as a submodule
     FetchContent_Declare(
         ${SYZKALLER}
-        GIT_REPOSITORY https://github.com/martin-beck/syzkaller.git
-        GIT_TAG martin/combine-writes
+        GIT_REPOSITORY https://github.com/open-s4c/syzkaller.git
+        GIT_TAG e9f652bd66695ed3e6cc5ae7883a9baa954714dd
         GIT_PROGRESS TRUE
         EXCLUDE_FROM_ALL)
 
