@@ -37,6 +37,7 @@ $_begin(NN = [[1; 2]]);
     int   num_succeeded_NN_prog;
     int   num_failed_NN_prog;
     uintptr_t mmap_offsets_NN_prog;
+    char* writeBuffer_NN_prog;
 $_end();
 };
 
@@ -151,6 +152,10 @@ $_begin(NN = [[1; 2]]);
 
     assert(ctx->mmap_offsets_NN_prog);
 
+    // allocate and fill write buffer
+    ctx->writeBuffer_NN_prog = (char*) malloc(maxWriteBufferSize_NN_prog);
+
+    // EVERYTHING MUT BE INITIALIZED BEFORE
     // do one warmup iteration to allocate memory in mmap
     bm_dispatch_operation_NN_prog(ctx, 0);
 
@@ -165,9 +170,12 @@ static inline void
 bm_target_dereg(thread_ctx_t *ctx, size_t tid)
 {
 $_begin(NN = [[1; 2]]);
-    // rm_tmpdir_NN_prog(ctx);
     free(ctx->tmpdir_NN_prog);
     ctx->tmpdir_NN_prog = NULL;
+
+    // free write buffer
+    free(ctx->writeBuffer_NN_prog);
+    ctx->writeBuffer_NN_prog = NULL;
 $_end();
 
     V_UNUSED(ctx, tid);
