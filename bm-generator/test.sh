@@ -4,7 +4,7 @@
 set -e
 
 STRACE_LOG="ls_strace.log"
-APP="ls"
+APP="ls -la /dev"
 ../scripts/plugins/collect_strace.sh ${STRACE_LOG} ${APP}
 echo "STEP#0: Initializing ..."
 ./00_init.sh
