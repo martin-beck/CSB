@@ -4,15 +4,16 @@
 ### Reference: https://docker-py.readthedocs.io/en/stable/containers.html
 import docker
 import docker.errors
+import os
 import sys
 from benchkit.shell.shell import shell_out
 from bm_executer import Executer
 from bm_executer import ExecutionUnit
 import bm_utils
 from typing import Optional
+from config.application import Application
 from config.container import ContainersConfig
 from config.nics import NicsConfig, ContainerNicConfig
-from config.application import Application
 from config.benchmark import ExecutionType
 from utils.logger import bm_log, LogType
 from bm_utils import resolve_path
@@ -81,8 +82,65 @@ class Container(ExecutionUnit):
             f"sudo ../scripts/add-nic-to-container.sh {netcfg.nic} {smp_irq_affinity} {pid} {self.name} {netcfg.ip} {netcfg.netmask}"
         )
 
+    def _host_home_dir(self):
+        # Use home_dir on its canonical form
+        home_dir = os.path.abspath(self.home_dir)
+
+        if not os.path.exists("/.dockerenv"):
+            return home_dir
+
+        #
+        # CSB is inside a docker container.
+        #
+        # Volume binds works like mount: when a volume is bound, any existing
+        # contents on it will be hidden. The new content will be whatever the
+        # host has.
+        #
+        # When running inside a docker container, we can't simply map the
+        # entire home directory, as this will simply replace whatever content
+        # it was already there by the ones from the host, which may be empty.
+        # What we need, instead, is to bind the volume where we want writes
+        # to be replicated within multiple containers, e.g. what is inside
+        # BUILTIN_APP_DIR.
+        #
+
+        try:
+            container = self.client.containers.get(os.uname().nodename)
+        except Exception as e:
+            bm_log(f"Unable to determine CSB container: {e}", LogType.ERROR)
+            return None
+
+        for mount in container.attrs.get("Mounts", []):
+            dest = mount.get("Destination")
+            source = mount.get("Source")
+            if not source or not dest:
+                continue
+
+            bm_log(f"volume bind: host: {source} -> to: {dest}")
+            if home_dir == dest:
+                bm_log(f"Running CSB with volume bind: host: '{source}' to: {dest}")
+                return source
+
+        bm_log(
+            f"CSB container doesn't map '{home_dir}'. Can't create subcontainers",
+            LogType.ERROR,
+        )
+        return None
+
     def __start(self, commands):
         self.stop()
+
+        host_home_dir = self._host_home_dir()
+
+        volumes = {
+            host_home_dir: {"bind": "/home", "mode": "rw"},
+            "/usr": {"bind": "/usr", "mode": "rw"},
+            "/mnt": {"bind": "/mnt", "mode": "rw"},
+            "/lib/modules": {"bind": "/lib/modules", "mode": "rw"},
+            "/etc": {"bind": "/etc", "mode": "rw"},
+        }
+
+        bm_log(f"Starting Container: {self.name}")
         try:
             ports = {f"{self.port}/tcp": ("0.0.0.0", self.port)} if self.port else None
             container = self.client.containers.run(
@@ -90,13 +148,7 @@ class Container(ExecutionUnit):
                 command=["bash", "-c", commands],
                 name=self.name,
                 cpuset_cpus=self.core_set,
-                volumes={
-                    f"{self.home_dir}": {"bind": "/home", "mode": "rw"},
-                    "/usr": {"bind": "/usr", "mode": "rw"},
-                    "/mnt": {"bind": "/mnt", "mode": "rw"},
-                    "/lib/modules": {"bind": "/lib/modules", "mode": "rw"},
-                    "/etc": {"bind": "/etc", "mode": "rw"},
-                },
+                volumes=volumes,
                 privileged=True,  # privileged mode
                 detach=True,  # detach mode
                 working_dir="/home",
@@ -112,13 +164,16 @@ class Container(ExecutionUnit):
             )
         except docker.errors.APIError as e:
             bm_log(f"Could not start container {self.name}: {str(e)}", LogType.ERROR)
+            return False
+
+        return True
 
     def exec(self, command):
         if self.app.cd:
             assert self.app.path is not None, "path is not set while change directory is requested!"
             command = f"cd {self.app.path} && {command}"
         commands = f"{self.CMD_WHILE_NOT_START} {command} > {resolve_path(self.output_file, use_in_container=True)}"  # same as self.output_file outside container.
-        self.__start(commands)
+        return self.__start(commands)
 
 
 class Containers(Executer):

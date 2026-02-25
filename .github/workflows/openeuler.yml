@@ -53,6 +53,7 @@ jobs:
       fail-fast: false
       matrix:
         test:
+          - bm_empty
           - min_mysql_close_dup_0_0
           - min_mysql_getdents64_close_0_0
           - min_mysql_lseek_read_1_0
@@ -74,10 +75,12 @@ jobs:
 
       - name: Test ${{ matrix.test }}
         run: |
+          mkdir /tmp/csb
           docker run --rm --name csb \
+            -v /tmp/csb:/home/csb \
             -v /boot:/boot \
             -v /lib/modules:/lib/modules \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -w /root/csb \
             ${{ env.TEST_TAG }} \
-            bash -c "scripts/fg-diff/run-single.sh config/${{ matrix.test }}.json"
+            bash -c "cp -ar . /home/csb && cd /home/csb && scripts/fg-diff/run-single.sh config/${{ matrix.test }}.json"

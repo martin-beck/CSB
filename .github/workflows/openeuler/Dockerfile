@@ -16,9 +16,6 @@ FROM ${BASE_IMAGE}
 #
 
 
-# Needed volumes. The first two are used by get info scripts
-VOLUME [ "/boot", "/lib/modules", "/var/run/docker.sock" ]
-
 #
 # Needed due to pandas issues with timestamps
 #
@@ -32,7 +29,7 @@ RUN dnf install -y cmake perf sysstat sudo gcc moby-engine moby-client hiredis-d
 #
 # Currently undocumented dependencies
 #
-RUN dnf install -y hostname python3 python3-pip iproute lshw ethtool nvme-cli hdparm libcgroup-tools stress-ng fio
+RUN dnf install -y hostname python3 python3-pip iproute lshw ethtool nvme-cli hdparm libcgroup-tools
 
 #
 # Docker-specific setup: install sudo disabling PAM authentication
@@ -57,6 +54,13 @@ RUN dnf clean all
 # Create a working directory and update submodules
 WORKDIR /root/csb
 COPY . .
+
+#
+# Directory used when running containers inside CSB.
+# This needs to be mapped by the host as otherwise container tests won't run.
+#
+RUN mkdir -p /root/csb/build/bench
+VOLUME [ "/root/csb/build/bench" ]
 
 #
 # Prepare the environment: initialize git submodules and venv
