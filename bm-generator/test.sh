@@ -18,3 +18,10 @@ echo "STEP#4: Preparing ..."
 ./04_prepare.sh
 echo "STEP#5: Generating ..."
 ./05_generate.sh
+
+echo "STEP#6: Build and test ..."
+cd ../build
+# We only want to build related targets not everything.
+find ../bench/targets/ -name "min_ls_*.h" | grep -v syz | sed 's/.*\/\(min_ls_.*\)\.h/\1/' | xargs make
+# We run only related tests
+ctest -R min_ls_* --output-on-failure

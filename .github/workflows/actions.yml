@@ -36,12 +36,8 @@ jobs:
       - name: Test bm-generator
         run: |
           go env -w GOBIN=$HOME/.local/bin
-          cd bm-generator/ && ./test.sh
-      - name: Build what bm-generator generated
-        run: |
-          cmake -S. -Bbuild
-          cmake --build build -j
-          ctest --test-dir build --output-on-failure -R min_ls_*
+          cd bm-generator/
+          ./test.sh
 
   # Checks if cmake and C files are properly formatted
   Check-Format:
