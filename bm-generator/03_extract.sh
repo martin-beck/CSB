@@ -6,7 +6,7 @@
  : ${DIR_PROG:="./deserialized"}
  : ${DIR_OUT:="./extracted"}
  : ${MINCALLS:=10}
- : ${JOBS:=$(nproc)}
+ : ${JOBS:=10}
 
 if [ ! -d "${DIR_PROG}" ]; then
   echo "Directory \"${DIR_PROG}\" with syz-lang programs does not exist."
@@ -45,15 +45,50 @@ numRunning() {
   echo `pgrep 'syz-extraction' | wc -l`
 }
 
+# arg1 is number of total calls
+# arg2 is number of total jobs
+# arg3 is job index starting at 0
+startIdx() {
+  numCalls=$1
+  numJobs=$2
+  idxJob=$3
+  sliceSize="$(($numCalls/$numJobs))"
+
+  echo $((${sliceSize} * ${idxJob}))
+}
+
+# arg1 is number of total calls
+# arg2 is number of total jobs
+# arg3 is job index starting at 0
+endIdx() {
+  numCalls=$1
+  numJobs=$2
+  idxJob=$3
+  sliceSize="$(($numCalls/$numJobs))"
+
+  if [ $jobIdx -lt $(($numJobs - 1)) ]; then
+    echo $(( (${sliceSize} * (${idxJob}+1))-1 ))
+  else
+    echo $(($numCalls - 1))
+  fi
+}
+
 i=0
 for file in $files; do
-  while [ $(numRunning) -ge ${JOBS} ]; do
-    sleep 1
-  done
   echo $file
   dir="${DIR_OUT_ABS}/$i"
   mkdir -p "${dir}"
-  bin/syz-extraction -prog "${file}" -deserialize "${dir}" -minCalls ${MINCALLS} &
+  numCalls="`cat ${file} | wc -l`"
+  jobIdx=0
+  while [ ${jobIdx} -lt ${JOBS} ]; do
+    while [ $(numRunning) -ge ${JOBS} ]; do
+      sleep 1
+    done
+    start=$(startIdx $numCalls ${JOBS} ${jobIdx})
+    end=$(endIdx $numCalls ${JOBS} ${jobIdx})
+    bin/syz-extraction -prog "${file}" -deserialize "${dir}" -minCalls ${MINCALLS} -syscallRangeStart ${start} -syscallRangeEnd ${end} &
+    jobIdx=$(($jobIdx + 1))
+  done
   i=$(($i + 1))
 done
 
