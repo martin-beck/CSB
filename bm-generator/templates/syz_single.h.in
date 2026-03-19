@@ -223,9 +223,14 @@ static inline void bm_target_reg(thread_ctx_t *ctx, size_t tid) {
 }
 
 static inline void bm_target_dereg(thread_ctx_t *ctx, size_t tid) {
+  char rm_tmpdir_cmd[4096];
   $_begin(NN = [[1; 2]]);
   // do the per test dereg
   bm_target_dereg_NN_prog(ctx);
+
+  memset(rm_tmpdir_cmd, \0, 4096);
+  snprintf(rm_tmpdir_cmd, 4096, "sudo rm -rf %s", ctx->tmpdir_NN_prog);
+  system(rm_tmpdir_cmd);
 
   free(ctx->tmpdir_NN_prog);
   // free(ctx->connect_arg_NN_prog);
