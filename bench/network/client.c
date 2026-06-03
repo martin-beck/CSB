@@ -20,14 +20,25 @@
 #include <getopt.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdint.h>
 
 #include "helper.h"
 
 static struct extracted_op eops[128];
 static size_t eops_sz = 0;
 
-#define MAX_EVS  16
-#define BUF_SIZE 1024
+#define MAX_EVS                 16
+#define MAX_IO_OPS_PER_EVENT    64
+#define NETOPS_STALL_TIMEOUT_MS 1000
+#define MAX_STALLED_WAITS       4
+
+#ifndef EPOLLRDHUP
+#define EPOLLRDHUP 0
+#endif
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 static uint8_t *sbuf;
 static size_t sbuf_size = 0;
@@ -35,25 +46,34 @@ static size_t sbuf_size = 0;
 struct conn_data {
     size_t step;
     size_t n;
+    unsigned int stalled_waits;
     int last_epoll;
     int fd;
+    struct conn_data *next;
 };
 
 struct epoll_st {
     int fd;
     size_t nconn;
+    struct conn_data *conns;
 };
+
+static uint32_t
+wait_event_for_step(size_t step)
+{
+    return eops[step].is_write ? EPOLLIN : EPOLLOUT;
+}
 
 static void
 config_wait(struct conn_data *d, struct epoll_st *est)
 {
     size_t step    = d->step;
-    int next_epoll = eops[step].is_write ? EPOLLIN : EPOLLOUT;
+    int next_epoll = wait_event_for_step(step);
     if (d->last_epoll == next_epoll) {
         return;
     }
     struct epoll_event ev_n;
-    ev_n.events   = next_epoll;
+    ev_n.events   = next_epoll | EPOLLRDHUP;
     ev_n.data.ptr = d;
     d->last_epoll = next_epoll;
     if (epoll_ctl(est->fd, EPOLL_CTL_MOD, d->fd, &ev_n) == -1) {
@@ -71,13 +91,71 @@ advance_step(struct conn_data *d)
     }
 }
 
+static bool
+resync_step(struct conn_data *d)
+{
+    bool current_dir = eops[d->step].is_write;
+    for (size_t i = 1; i < eops_sz; i++) {
+        size_t next = (d->step + i) % eops_sz;
+        if (eops[next].is_write != current_dir) {
+            d->step = next;
+            d->n    = 0;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void
+track_conn(struct conn_data *d, struct epoll_st *est)
+{
+    d->next    = est->conns;
+    est->conns = d;
+    est->nconn++;
+}
+
+static void
+untrack_conn(struct conn_data *d, struct epoll_st *est)
+{
+    struct conn_data **cur = &est->conns;
+    while (*cur && *cur != d) {
+        cur = &(*cur)->next;
+    }
+    if (*cur) {
+        *cur = d->next;
+        est->nconn--;
+    }
+}
+
 static void
 unregister(struct conn_data *d, struct epoll_st *est)
 {
     epoll_ctl(est->fd, EPOLL_CTL_DEL, d->fd, NULL);
     close(d->fd);
+    untrack_conn(d, est);
     free(d);
-    est->nconn--;
+}
+
+static void
+handle_stalled_conn(struct conn_data *d, struct epoll_st *est)
+{
+    d->stalled_waits++;
+    if (d->stalled_waits > MAX_STALLED_WAITS || !resync_step(d)) {
+        unregister(d, est);
+        return;
+    }
+    config_wait(d, est);
+}
+
+static void
+handle_stalled_conns(struct epoll_st *est)
+{
+    struct conn_data *d = est->conns;
+    while (d) {
+        struct conn_data *next = d->next;
+        handle_stalled_conn(d, est);
+        d = next;
+    }
 }
 
 static bool
@@ -90,13 +168,16 @@ register_new(struct epoll_st *est, struct sockaddr *serv_addr, size_t addr_size,
         return false;
     }
 
-    d->step       = 0;
-    d->n          = 0;
-    d->last_epoll = eops[0].is_write ? EPOLLIN : EPOLLOUT;
+    d->step          = 0;
+    d->n             = 0;
+    d->stalled_waits = 0;
+    d->last_epoll    = wait_event_for_step(0);
+    d->next          = NULL;
 
     int csock = socket(serv_addr->sa_family, SOCK_STREAM, 0);
     if (csock == -1) {
         fprintf(stderr, "socket failed!\n");
+        free(d);
         return false;
     }
     d->fd = csock;
@@ -104,21 +185,28 @@ register_new(struct epoll_st *est, struct sockaddr *serv_addr, size_t addr_size,
     int connect_ret = 0;
     do {
         connect_ret = connect(csock, serv_addr, addr_size);
+        if (retry_on_fail && connect_ret != 0) {
+            usleep(1000);
+        }
     } while (retry_on_fail && connect_ret != 0);
 
     if (connect_ret == -1) {
         fprintf(stderr, "connect failed!\n");
+        close(csock);
+        free(d);
         return false;
     }
 
     setnonblocking(csock);
-    ev.events   = d->last_epoll;
+    ev.events   = d->last_epoll | EPOLLRDHUP;
     ev.data.ptr = d;
     if (epoll_ctl(est->fd, EPOLL_CTL_ADD, csock, &ev) == -1) {
         fprintf(stderr, "epoll_ctl failed!\n");
+        close(csock);
+        free(d);
         return false;
     }
-    est->nconn++;
+    track_conn(d, est);
     printf("[Client] %zu connections established.\n", est->nconn);
     return true;
 }
@@ -128,31 +216,53 @@ readwrite(struct epoll_event *ev, struct epoll_st *est)
 {
     struct conn_data *d = ev->data.ptr;
     int fd              = d->fd;
-    int r               = 0;
-    if (ev->events & (EPOLLHUP | EPOLLERR)) {
+    bool progressed     = false;
+    if ((ev->events & EPOLLERR) ||
+        ((ev->events & (EPOLLHUP | EPOLLRDHUP)) &&
+         !(ev->events & wait_event_for_step(d->step)))) {
         unregister(d, est);
         return;
     }
-    assert(eops[d->step].sz < sbuf_size);
-    if (ev->events & EPOLLOUT) {
-        assert(!eops[d->step].is_write);
-    } else if (ev->events & EPOLLIN) {
-        assert(eops[d->step].is_write);
-    }
 
-    while (r != -1) {
+    for (size_t i = 0; i < MAX_IO_OPS_PER_EVENT; i++) {
+        if (!(ev->events & wait_event_for_step(d->step))) {
+            break;
+        }
+        assert(eops[d->step].sz < sbuf_size);
+        if (eops[d->step].sz == 0) {
+            advance_step(d);
+            progressed = true;
+            continue;
+        }
+        ssize_t r = 0;
         if (eops[d->step].is_write) {
             r = recv(fd, &sbuf[0], eops[d->step].sz, 0);
         } else {
-            r = send(fd, &sbuf[0], eops[d->step].sz, 0);
+            r = send(fd, &sbuf[0], eops[d->step].sz, MSG_NOSIGNAL);
         }
-        if (r != -1) {
+        if (r > 0) {
             advance_step(d);
+            progressed = true;
+            continue;
         }
-    }
-    if (r == -1 && (errno != EAGAIN && errno != ECONNRESET)) {
+        if (r == 0) {
+            if (eops[d->step].is_write) {
+                unregister(d, est);
+                return;
+            }
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            break;
+        }
         unregister(d, est);
         return;
+    }
+    if (progressed) {
+        d->stalled_waits = 0;
     }
     if (0 && d->step == 0) {
         unregister(d, est);
@@ -203,6 +313,7 @@ main(int argc, char *argv[])
                 break;
             case '6':
                 use_ipv6 = true;
+                break;
             case 'P':
                 program = optarg;
                 break;
@@ -211,6 +322,7 @@ main(int argc, char *argv[])
                 break;
             case 'O':
                 only_once = true;
+                break;
             case 'F':
                 prog_file = optarg;
                 break;
@@ -239,12 +351,14 @@ main(int argc, char *argv[])
         usage(argv[0]);
         return 'P';
     }
-    eops_sz = parse_ops(program, &eops[0], sizeof(eops) / sizeof(eops[0]));
-    if (eops_sz < 0) {
+    long parsed_ops =
+        parse_ops(program, &eops[0], sizeof(eops) / sizeof(eops[0]));
+    if (parsed_ops <= 0) {
         fprintf(stderr, "Failed to parse operation sequence.\n");
         usage(argv[0]);
         return 'P';
     }
+    eops_sz = (size_t)parsed_ops;
 
     // allocate buffer large enough
     sbuf_size = get_max_buffer_size(&eops[0], eops_sz) + 1;
@@ -263,7 +377,7 @@ main(int argc, char *argv[])
           .ai_flags    = AI_CANONNAME,
     };
     int r = getaddrinfo(host, NULL, &hints, &result);
-    if (r == -1) {
+    if (r != 0) {
         fprintf(stderr, "getaddrinfo: %s", gai_strerror(r));
         return 1;
     }
@@ -293,6 +407,10 @@ main(int argc, char *argv[])
         }
         break;
     }
+    if (!serv_addr) {
+        fprintf(stderr, "No address found for host %s\n", host);
+        return 1;
+    }
 
     struct epoll_st est = {};
     est.fd              = epoll_create1(0);
@@ -311,8 +429,13 @@ main(int argc, char *argv[])
 
     while (est.nconn) {
         struct epoll_event evs[MAX_EVS];
-        int nfds = epoll_wait(est.fd, &evs[0], MAX_EVS, -1);
+        int nfds =
+            epoll_wait(est.fd, &evs[0], MAX_EVS, NETOPS_STALL_TIMEOUT_MS);
         if (nfds == -1) {
+            continue;
+        }
+        if (nfds == 0) {
+            handle_stalled_conns(&est);
             continue;
         }
         for (int i = 0; i < nfds; i++) {
