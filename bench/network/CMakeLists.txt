@@ -15,3 +15,7 @@ endforeach(AGENT)
 
 add_test(NAME client-server-comm
          COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test-comm.sh)
+
+add_test(NAME client-server-divergent-netops
+         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test-divergent-netops.sh)
+set_tests_properties(client-server-divergent-netops PROPERTIES TIMEOUT 12)
