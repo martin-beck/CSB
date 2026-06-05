@@ -1,0 +1,112 @@
+From a2dd00fd28379205c0e3046cd90355a31846351c Mon Sep 17 00:00:00 2001
+From: Martin Beck <martin.beck2@gmx.de>
+Date: Fri, 5 Jun 2026 11:04:12 +0200
+Subject: [PATCH 4/4] docs: describe ext4 benchmark optimization branch
+
+Add a branch-local note for the bm_min_rocks_fcntl_pread64_0_0
+analysis.
+
+The note records the benchmark motivation, the touched kernel paths,
+the correctness argument for each fast path, the expected performance
+effect, and the validation that should be run before production use.
+
+Signed-off-by: Martin Beck <martin.beck2@gmx.de>
+---
+ .../ext4/bm-min-rocks-optimizations.rst       | 73 +++++++++++++++++++
+ Documentation/filesystems/ext4/index.rst      |  1 +
+ 2 files changed, 74 insertions(+)
+ create mode 100644 Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst
+
+diff --git a/Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst b/Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst
+new file mode 100644
+index 000000000000..49bdb2e9bb83
+--- /dev/null
++++ b/Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst
+@@ -0,0 +1,73 @@
++.. SPDX-License-Identifier: GPL-2.0
++
++Ext4 truncate/write/fsync microbenchmark optimizations
++======================================================
++
++Motivation
++----------
++
++The ``bm_min_rocks_fcntl_pread64_0_0`` benchmark repeatedly truncates a
++regular file, writes roughly 2 MiB through buffered I/O, calls ``fdatasync()``,
++and then performs small read-side operations.  The collected perf data shows
++that the scalability limit is not ``fcntl()`` or ``pread64()``.  The hot paths
++are ext4 buffered write/page-cache setup, full-file truncate invalidation,
++JBD2 buffer release checks, ext4 writeback, bio submission, and block flushes.
++
++This branch keeps the changes deliberately small.  It does not change ext4's
++on-disk format, journaling mode selection, write ordering, or fsync policy.
++Instead it removes avoidable work from common clean data-folio paths hit by the
++benchmark.
++
++Changes
++-------
++
++* ``ext4_release_folio()`` now sends ordered/writeback regular-file data folios
++  directly to ``try_to_free_buffers()``.  Data-journaled folios still use
++  ``jbd2_journal_try_to_free_buffers()``.
++
++* ``block_invalidate_folio()`` now has an early release path for full-folio
++  invalidation when the folio is clean, not under writeback, and all attached
++  buffers are clean and unlocked.  If the filesystem refuses to release the
++  folio, the existing invalidate/discard path runs unchanged.
++
++* ``ext4_bio_write_folio()`` batches cgroup writeback owner accounting once per
++  folio for the number of bytes actually submitted, instead of charging once
++  per buffer.
++
++Correctness and safety
++----------------------
++
++The ext4 release fast path is limited to folios for which ext4 does not journal
++regular file data.  ``ext4_should_journal_data()`` keeps data-journal mode on
++the existing JBD2 path, and ``folio_test_checked()`` still prevents releasing a
++folio carrying dirty journaled data.  In ordered and writeback data modes,
++``ext4_invalidate_folio()`` already relies on the invariant that regular data
++buffers are not owned by JBD2.  The new branch uses the same invariant to avoid
++JBD2 journal-head locking during release.
++
++The full-folio invalidate fast path only handles complete folio invalidations.
++It first verifies that the folio is clean, not under writeback, and that no
++buffer is dirty or locked.  It then delegates the actual removal to
++``filemap_release_folio()`` and returns only if that removal succeeds.  If any
++precondition is not met, or if the filesystem-specific release callback says
++the folio cannot be released, the previous buffer discard logic is used.
++
++The writeback accounting batching is byte-equivalent for a folio because
++``wbc_account_cgroup_owner()`` derives ownership from the folio's memory cgroup.
++Several per-buffer charges from the same folio and one charge for their summed
++byte count produce the same owner vote and byte totals.
++
++Expected effect
++---------------
++
++The benchmark's high-parallelism runs spend visible CPU time in
++``block_invalidate_folio()``, ``ext4_release_folio()``, JBD2 journal-head
++handling, and buffer-head allocation/freeing after each truncate.  The first
++two changes reduce work in that exact clean truncate path after the prior
++``fdatasync()`` has pushed data out.  The cgroup accounting change is smaller,
++but removes repeated per-buffer accounting when folios contain multiple
++buffers.
++
++These patches should be validated with the same benchmark using full-system
++perf sampling, lock contention tracing around JBD2 and buffer-head locks, and
++xfstests coverage for ext4 ordered, writeback, and data-journal modes.
+diff --git a/Documentation/filesystems/ext4/index.rst b/Documentation/filesystems/ext4/index.rst
+index 705d813d558f..9811552478b4 100644
+--- a/Documentation/filesystems/ext4/index.rst
++++ b/Documentation/filesystems/ext4/index.rst
+@@ -10,5 +10,6 @@ ext4 Data Structures and Algorithms
+ 
+    about
+    overview
++   bm-min-rocks-optimizations
+    globals
+    dynamic
+-- 
+2.43.0
+

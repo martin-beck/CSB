@@ -1,0 +1,65 @@
+From 6a9e0649b1a38094f320a5cde4ff3359c1422c2a Mon Sep 17 00:00:00 2001
+From: Martin Beck <martin.beck2@gmx.de>
+Date: Fri, 5 Jun 2026 11:04:00 +0200
+Subject: [PATCH 2/4] fs/buffer: release clean full folios before discard
+
+Full-file truncation after fdatasync commonly invalidates folios whose
+buffers are already clean and unlocked.
+
+block_invalidate_folio() still walks those buffers, locks each one,
+clears state, and only then asks the filesystem to release the folio.
+
+Add a guarded early release path for complete folio invalidation. The
+fast path requires a clean folio, no writeback, and clean unlocked
+buffers, then delegates to filemap_release_folio().
+
+If release fails, the existing discard path runs unchanged. Partial
+invalidation and dirty or locked buffers keep the previous behavior.
+
+Signed-off-by: Martin Beck <martin.beck2@gmx.de>
+---
+ fs/buffer.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/fs/buffer.c b/fs/buffer.c
+index c225eef13279..2fc71892e310 100644
+--- a/fs/buffer.c
++++ b/fs/buffer.c
+@@ -1571,6 +1571,23 @@ static void discard_buffer(struct buffer_head * bh)
+ 	unlock_buffer(bh);
+ }
+ 
++static bool block_try_release_clean_folio(struct folio *folio,
++					  struct buffer_head *head)
++{
++	struct buffer_head *bh = head;
++
++	if (folio_test_dirty(folio) || folio_test_writeback(folio))
++		return false;
++
++	do {
++		if (buffer_dirty(bh) || buffer_locked(bh))
++			return false;
++		bh = bh->b_this_page;
++	} while (bh != head);
++
++	return filemap_release_folio(folio, 0);
++}
++
+ /**
+  * block_invalidate_folio - Invalidate part or all of a buffer-backed folio.
+  * @folio: The folio which is affected.
+@@ -1603,6 +1620,10 @@ void block_invalidate_folio(struct folio *folio, size_t offset, size_t length)
+ 	if (!head)
+ 		return;
+ 
++	if (offset == 0 && length == folio_size(folio) &&
++	    block_try_release_clean_folio(folio, head))
++		return;
++
+ 	bh = head;
+ 	do {
+ 		size_t next_off = curr_off + bh->b_size;
+-- 
+2.43.0
+

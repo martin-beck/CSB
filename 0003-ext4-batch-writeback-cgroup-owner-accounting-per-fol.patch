@@ -1,0 +1,70 @@
+From eacf1a73475fc0614dd6b4c709703080de8f4a51 Mon Sep 17 00:00:00 2001
+From: Martin Beck <martin.beck2@gmx.de>
+Date: Fri, 5 Jun 2026 11:04:05 +0200
+Subject: [PATCH 3/4] ext4: batch writeback cgroup owner accounting per folio
+
+ext4_bio_write_folio() accounts cgroup writeback ownership once for
+each submitted buffer, but wbc_account_cgroup_owner() derives the owner
+from the folio.
+
+Multiple charges from the same folio are byte-equivalent to one charge
+for the summed submitted length.
+
+Accumulate the submitted bytes in ext4_bio_write_folio() and account
+them once after the buffer submission loop.
+
+Bio construction and submitted byte counts are unchanged; only repeated
+ownership-accounting calls are collapsed.
+
+Signed-off-by: Martin Beck <martin.beck2@gmx.de>
+---
+ fs/ext4/page-io.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/fs/ext4/page-io.c b/fs/ext4/page-io.c
+index c0ef8fe25af2..412ad197ae4a 100644
+--- a/fs/ext4/page-io.c
++++ b/fs/ext4/page-io.c
+@@ -420,8 +420,6 @@ static void io_submit_init_bio(struct ext4_io_submit *io,
+ }
+ 
+ static void io_submit_add_bh(struct ext4_io_submit *io,
+-			     struct inode *inode,
+-			     struct folio *folio,
+ 			     struct folio *io_folio,
+ 			     struct buffer_head *bh)
+ {
+@@ -434,7 +432,6 @@ static void io_submit_add_bh(struct ext4_io_submit *io,
+ 		io_submit_init_bio(io, bh);
+ 	if (!bio_add_folio(io->io_bio, io_folio, bh->b_size, bh_offset(bh)))
+ 		goto submit_and_retry;
+-	wbc_account_cgroup_owner(io->io_wbc, &folio->page, bh->b_size);
+ 	io->io_next_block++;
+ }
+ 
+@@ -449,6 +446,7 @@ int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
+ 	int nr_to_submit = 0;
+ 	struct writeback_control *wbc = io->io_wbc;
+ 	bool keep_towrite = false;
++	size_t submitted = 0;
+ 
+ 	BUG_ON(!folio_test_locked(folio));
+ 	BUG_ON(folio_test_writeback(folio));
+@@ -576,9 +574,13 @@ int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
+ 	do {
+ 		if (!buffer_async_write(bh))
+ 			continue;
+-		io_submit_add_bh(io, inode, folio, io_folio, bh);
++		io_submit_add_bh(io, io_folio, bh);
++		submitted += bh->b_size;
+ 	} while ((bh = bh->b_this_page) != head);
+ 
++	if (submitted)
++		wbc_account_cgroup_owner(wbc, &folio->page, submitted);
++
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

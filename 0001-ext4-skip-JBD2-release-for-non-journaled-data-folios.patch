@@ -1,0 +1,52 @@
+From a81efabff0a81178c8c9477f90504698dd9c3611 Mon Sep 17 00:00:00 2001
+From: Martin Beck <martin.beck2@gmx.de>
+Date: Fri, 5 Jun 2026 11:03:23 +0200
+Subject: [PATCH 1/4] ext4: skip JBD2 release for non-journaled data folios
+
+The benchmark repeatedly invalidates clean regular-file data folios
+after fdatasync.
+
+In ordered and writeback data modes, regular file data buffers are not
+owned by JBD2. ext4_invalidate_folio() already relies on the same
+invariant.
+
+Route those folios directly to try_to_free_buffers() instead of walking
+every buffer through jbd2_journal_try_to_free_buffers() and journal-head
+locking.
+
+Data-journal mode and folios marked with dirty journaled data still use
+the existing JBD2 path, so journaled-data semantics are unchanged.
+
+Signed-off-by: Martin Beck <martin.beck2@gmx.de>
+---
+ fs/ext4/inode.c | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/fs/ext4/inode.c b/fs/ext4/inode.c
+index 0a48b706d2d5..dd8df5bc4649 100644
+--- a/fs/ext4/inode.c
++++ b/fs/ext4/inode.c
+@@ -3359,10 +3359,17 @@ static bool ext4_release_folio(struct folio *folio, gfp_t wait)
+ 	/* Page has dirty journalled data -> cannot release */
+ 	if (folio_test_checked(folio))
+ 		return false;
+-	if (journal)
+-		return jbd2_journal_try_to_free_buffers(journal, folio);
+-	else
++
++	/*
++	 * In ordered and writeback data modes, regular file data buffers are not
++	 * owned by JBD2.  ext4_invalidate_folio() relies on the same property.
++	 * Avoid walking every buffer through JBD2 journal-head locking in the
++	 * common truncate/reclaim path for those data folios.
++	 */
++	if (!journal || !ext4_should_journal_data(inode))
+ 		return try_to_free_buffers(folio);
++
++	return jbd2_journal_try_to_free_buffers(journal, folio);
+ }
+ 
+ static bool ext4_inode_datasync_dirty(struct inode *inode)
+-- 
+2.43.0
+
