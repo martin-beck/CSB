@@ -29,12 +29,14 @@ class MonitorType(str, Enum):
     ----------
     MPSTAT: Runs mpstat and generates related graphs.
     PERF: Runs perf and generates flame-graphs.
+    IOSTAT: Runs iostat -x and generates block-device graphs.
     REDIS_BENCHMARK: parses the output of redis_benchmark.
     SAR_NET: monitors network traffic.
     """
 
     MPSTAT = "mpstat"
     PERF = "perf"
+    IOSTAT = "iostat"
     REDIS_BENCHMARK = "redis_benchmark"
     SAR_NET = "sar_net"
 

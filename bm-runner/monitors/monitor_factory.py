@@ -5,6 +5,7 @@ from config.benchmark import MonitorType
 from monitors.mpstat import SystemStats
 from monitors.redis_bench import RedisStats
 from monitors.perf import FlameGraph
+from monitors.iostat import IostatStats
 from monitors.sarnet import SarNetStats
 from monitors.monitor import Monitor
 from utils.logger import bm_log, LogType
@@ -45,6 +46,8 @@ class MonitorFactory:
                 return SystemStats(output_dir=results_dir, args=args)
             case MonitorType.PERF:
                 return FlameGraph(output_dir=results_dir, args=args)
+            case MonitorType.IOSTAT:
+                return IostatStats(output_dir=results_dir, args=args)
             case MonitorType.REDIS_BENCHMARK:
                 return RedisStats(output_dir=results_dir, args=args)
             case MonitorType.SAR_NET:
