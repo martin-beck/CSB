@@ -1,0 +1,6 @@
+interface:
+  display_name: "CSB"
+  short_description: "Work with Container Scalability Benchmarks"
+  default_prompt: "Use $csb to configure, run, analyze, or modify the CSB benchmark framework."
+policy:
+  allow_implicit_invocation: true
