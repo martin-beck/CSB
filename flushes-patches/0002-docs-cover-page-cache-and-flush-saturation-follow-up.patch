@@ -1,0 +1,100 @@
+From 9b1c7f596f5181f3dbf5205dd16e97b5ec73f4db Mon Sep 17 00:00:00 2001
+From: Martin Beck <martin.beck2@gmx.de>
+Date: Mon, 8 Jun 2026 15:10:00 +0200
+Subject: [PATCH 2/2] docs: cover page-cache and flush saturation follow-ups
+
+Record the follow-up all-core perf and iostat interpretation for the
+bm_min_rocks_fcntl_pread64_0_0 benchmark.
+
+The page-cache section explains why allocator-zero bypass is unsafe and
+points validation toward ext4 buffered iomap with large-folio support.
+The storage section documents fsync_batch_usec and the ordering rule
+that allows only pre-submission callers to share a flush.
+
+Signed-off-by: Martin Beck <martin.beck2@gmx.de>
+---
+ .../ext4/bm-min-rocks-optimizations.rst       | 60 ++++++++++++++++++-
+ 1 file changed, 58 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst b/Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst
+index 1ca6f860aa4f..4e5491c9f248 100644
+--- a/Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst
++++ b/Documentation/filesystems/ext4/bm-min-rocks-optimizations.rst
+@@ -68,12 +68,62 @@ two changes reduce work in that exact clean truncate path after the prior
+ but removes repeated per-buffer accounting when folios contain multiple
+ buffers.
+ 
++Follow-up full-system perf and iostat results added two more observations.
++First, with all CPUs sampled the largest leaf under the write path can be
++``clear_page_erms`` from page-cache folio allocation.  This is particularly
++visible on kernels built with ``CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y``.  The safe
++kernel-side mitigation is not to bypass allocator zeroing: page-cache contents
++must never expose stale memory if a short copy, signal, mmap race, or partial
++write leaves bytes outside the user-supplied range.  Instead, this branch relies
++on ext4's buffered-iomap path with large-folio support, which amortizes
++allocation and zeroing over larger folios without weakening memory-disclosure
++hardening.  Benchmark runs intended to exercise this path should avoid the
++``nobuffered_iomap`` mount option and should confirm in perf that writes enter
++``ext4_iomap_buffered_write()``/``iomap_file_buffered_write()`` rather than the
++legacy ``ext4_da_write_begin()`` buffer-head path.
++
++Second, iostat shows that high parallelism drives the active NVMe device to
++roughly 2 GiB/s of writes, rising queue depth, and increasing write latency.
++The benchmark issues one ``fdatasync()`` per 2 MiB rewrite, so device cache
++flushes become an important scalability limiter.  For opt-in experiments, this
++branch adds an ext4 mount option:
++
++``fsync_batch_usec=N``
++  Hold a required fsync/fdatasync device flush in a short collection window of
++  up to ``N`` microseconds, capped at 10000.  Concurrent callers that have
++  already completed data writeback and journal commit before the flush is
++  submitted can share that one flush.  The default is 0, which preserves the
++  existing behavior.
++
++Flush batching correctness
++--------------------------
++
++``fsync_batch_usec`` only affects the final ``blkdev_issue_flush()`` step after
++``ext4_sync_file()`` has already run ``file_write_and_wait_range()`` and waited
++for the relevant journal transaction.  A caller can join an existing batch only
++while the batch leader is still collecting and has not submitted the flush.  A
++caller arriving after the flush has been submitted waits for it to finish and
++then starts a new batch, because that caller's data may be newer than the
++already-submitted flush.
++
++This preserves the essential fdatasync ordering guarantee: every caller served
++by a shared flush completed its data and metadata prerequisites before that
++flush began, and the syscall returns only after the shared flush completes.  The
++option trades a bounded amount of latency for fewer flush commands under
++massively parallel fsync-heavy workloads.  It should be left at the default
++``0`` for latency-sensitive deployments unless measurements justify batching.
++
+ Current validation
+ ------------------
+ 
+-The code changes pass ``scripts/checkpatch.pl --strict`` for the three code
+-commits and compile as individual objects with an x86_64 ``defconfig``:
++The code changes pass ``scripts/checkpatch.pl --strict``.  The fsync batching
++commit has one expected ``CAMELCASE`` check for the new ``Opt_*`` mount parser
++token, matching the surrounding ext4 option style; rerunning checkpatch with
++``--ignore CAMELCASE`` is clean.  The touched objects compile with an x86_64
++``defconfig``:
+ 
++* ``fs/ext4/fsync.o``
++* ``fs/ext4/super.o``
+ * ``fs/ext4/inode.o``
+ * ``fs/ext4/page-io.o``
+ * ``fs/buffer.o``
+@@ -88,3 +138,9 @@ maintainers.
+ These patches should be validated with the same benchmark using full-system
+ perf sampling, lock contention tracing around JBD2 and buffer-head locks, and
+ xfstests coverage for ext4 ordered, writeback, and data-journal modes.
++Additional storage-saturation validation should compare ``fsync_batch_usec=0``
++against small values such as 50, 100, and 250 microseconds while tracking
++``iostat`` flush rate, write latency, queue depth, and benchmark throughput.
++Crash-consistency testing should include power-fail style tests around
++concurrent ``fdatasync()`` calls and remount testing that toggles
++``fsync_batch_usec``.
+-- 
+2.43.0
+
