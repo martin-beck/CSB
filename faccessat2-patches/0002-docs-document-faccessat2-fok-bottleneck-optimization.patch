@@ -1,0 +1,121 @@
+diff --git a/Documentation/filesystems/index.rst b/Documentation/filesystems/index.rst
+index b0ef415539b3..8f337edd441e 100644
+--- a/Documentation/filesystems/index.rst
++++ b/Documentation/filesystems/index.rst
+@@ -20,6 +20,7 @@ algorithms work.
+ 
+    vfs
+    path-lookup
++   faccessat2-fok-optimization
+    api-summary
+    splice
+    locking
+diff --git a/Documentation/filesystems/faccessat2-fok-optimization.rst b/Documentation/filesystems/faccessat2-fok-optimization.rst
+new file mode 100644
+index 000000000000..f78b0f8c3858
+--- /dev/null
++++ b/Documentation/filesystems/faccessat2-fok-optimization.rst
+@@ -0,0 +1,103 @@
++.. SPDX-License-Identifier: GPL-2.0
++
++faccessat2(F_OK) path lookup microbenchmark
++===========================================
++
++Motivation
++----------
++
++The ``bm_min_mysql_faccessat2_missing_1_0`` benchmark repeatedly issues
++``faccessat2(dirfd, "./var/lib/mysql/sbtest/", F_OK, AT_EACCESS)``.  The
++2026-06-09 run on a 32 CPU ``i9-13900K`` system shows a CPU-bound workload:
++``iostat`` reports no meaningful I/O wait and less than 2% NVMe utilization,
++while ``mpstat`` reports system CPU rising to roughly 76-78% at 30 workers.
++
++The full-system perf profile is dominated by VFS pathname lookup and access
++checking, not by ext4 writeback or block I/O:
++
++.. csv-table::
++   :header: "Path", "Approximate 30-worker sampled cycles"
++
++   "``do_faccessat()``", "81-82%"
++   "``filename_lookup()``", "49-50%"
++   "``path_lookupat()``", "46%"
++   "``link_path_walk()``", "28%"
++   "``getname_flags()``", "19-20%"
++   "``walk_component()``", "11-12%"
++   "``inode_permission()``", "10%"
++   "``strncpy_from_user()``", "9-10%"
++   "``lookup_fast()``/``__d_lookup()``", "5%"
++
++The native and container runs are close to each other, so the main scalability
++limit is shared VFS/namei CPU work rather than container isolation overhead.
++
++Implemented optimization
++------------------------
++
++``faccessat2(F_OK)`` verifies existence after pathname lookup.  The lookup
++itself has already checked search permission on parent directories.  After a
++successful lookup, ``do_faccessat()`` calls ``inode_permission()`` with the
++``MAY_ACCESS`` bit so that filesystem and security hooks still see an access
++probe.
++
++For inodes that do not implement a custom ``->permission()`` method, the VFS
++sets ``IOP_FASTPERM`` and falls through to ``generic_permission()``.  With a
++mask of exactly ``MAY_ACCESS``, ``generic_permission()`` does not enforce any
++DAC read, write, or execute bit because no such access bit is requested.  The
++new fast path therefore returns success from ``do_inode_permission()`` when:
++
++* the inode is already known to use the generic permission path, and
++* the requested mask is exactly ``MAY_ACCESS``.
++
++This removes repeated uid/gid mapping, ACL checks, and mode-bit calculations
++from hot existence probes while keeping the rest of ``inode_permission()``
++unchanged.
++
++Correctness and safety
++----------------------
++
++The change is deliberately narrow.
++
++* Filesystems with a custom ``->permission()`` method are unaffected.  The
++  fast path is reached only after ``IOP_FASTPERM`` is set, which means the inode
++  has no custom permission method.
++* Directory search permission is still checked during pathname walking through
++  ``may_lookup()`` and related namei code.  The patch affects only the final
++  ``MAY_ACCESS`` check after lookup succeeds.
++* ``sb_permission()`` still runs before the fast path.  Write checks, immutable
++  checks, and unmapped-id checks are unchanged for masks that request write
++  access.
++* Device-cgroup and LSM checks still run in ``inode_permission()`` after
++  ``do_inode_permission()`` succeeds.  This preserves security hooks such as
++  ``security_inode_permission(inode, MAY_ACCESS)`` and keeps IMA/LSM access
++  semantics intact.
++* Read, write, and execute checks are unchanged because the fast path requires
++  ``mask == MAY_ACCESS`` exactly.
++
++More aggressive ideas not implemented here
++------------------------------------------
++
++The profile also shows substantial time in ``getname_flags()`` and
++``strncpy_from_user()`` because the benchmark copies the same short userspace
++pathname on every syscall.  A kernel cache for userspace pathname strings would
++be unsafe without very careful invalidation because userspace can modify the
++buffer before each syscall.
++
++Similarly, caching the resolved path for repeated ``faccessat2()`` calls would
++need to handle rename, mount, idmapped mount, namespace, LSM, and permission
++changes.  That is far riskier than removing generic DAC work that is already a
++semantic no-op for ``MAY_ACCESS``.
++
++Validation guidance
++-------------------
++
++The targeted validation for this change is:
++
++* compile ``fs/namei.o`` with an x86_64 ``defconfig``;
++* run sparse over ``fs/namei.c``;
++* run VFS-focused selftests that cover path lookup and openat2 behavior;
++* run access/faccessat/faccessat2 smoke tests for existing, missing,
++  inaccessible, symlink, and empty-path cases;
++* rerun ``bm_min_mysql_faccessat2_missing_1_0`` and confirm that perf shows a
++  smaller ``generic_permission()``/``acl_permission_check()`` footprint while
++  LSM hooks remain visible when enabled.

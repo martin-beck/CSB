@@ -1,0 +1,21 @@
+diff --git a/fs/namei.c b/fs/namei.c
+index 757e838427bb..3fe71ddd3950 100644
+--- a/fs/namei.c
++++ b/fs/namei.c
+@@ -466,6 +466,16 @@ static inline int do_inode_permission(struct mnt_idmap *idmap,
+ 		inode->i_opflags |= IOP_FASTPERM;
+ 		spin_unlock(&inode->i_lock);
+ 	}
++
++	/*
++	 * MAY_ACCESS is used by faccessat(F_OK) after path lookup has already
++	 * checked directory search permissions.  For inodes without a custom
++	 * ->permission() method, generic_permission() is a no-op for this mask;
++	 * avoid the repeated uid/gid and ACL checks in hot existence probes.
++	 */
++	if (mask == MAY_ACCESS)
++		return 0;
++
+ 	return generic_permission(idmap, inode, mask);
+ }
+ 
