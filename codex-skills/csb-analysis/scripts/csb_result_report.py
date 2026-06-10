@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a first-pass CSB result analysis report."""
+"""Generate CSB result analysis reports from completed result artifacts."""
 
 from __future__ import annotations
 
@@ -9,12 +9,53 @@ import importlib.util
 import json
 import math
 import re
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean
 
 
 RUN_RE = re.compile(r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})_(?P<usec>\d{6})$")
+COMPILER_SUFFIX_RE = re.compile(r"(\.constprop\.\d+|\.isra\.\d+|\.part\.\d+)$")
+SOURCE_LOOKUP_CACHE: dict[tuple[str, str], list[tuple[str, int, str]]] = {}
+
+SYSCALL_SOURCE_MAP = {
+    "faccessat2": [("fs/open.c", "do_faccessat"), ("fs/namei.c", "user_path_at_empty")],
+    "fallocate": [("fs/open.c", "ksys_fallocate"), ("fs/ioctl.c", "ioctl_preallocate")],
+    "fcntl": [("fs/fcntl.c", "do_fcntl"), ("fs/locks.c", "fcntl_setlk")],
+    "fsync": [("fs/sync.c", "ksys_fsync"), ("fs/fs-writeback.c", "wb_workfn")],
+    "getdents64": [("fs/readdir.c", "iterate_dir"), ("fs/readdir.c", "filldir64")],
+    "lseek": [("fs/read_write.c", "ksys_lseek"), ("fs/read_write.c", "vfs_llseek")],
+    "newfstatat": [("fs/stat.c", "do_statx"), ("fs/stat.c", "vfs_statx")],
+    "openat": [("fs/open.c", "do_sys_openat2"), ("fs/namei.c", "path_openat")],
+    "pread64": [("fs/read_write.c", "ksys_pread64"), ("mm/filemap.c", "filemap_read")],
+    "pwrite64": [("fs/read_write.c", "ksys_pwrite64"), ("mm/filemap.c", "generic_perform_write")],
+    "read": [("fs/read_write.c", "ksys_read"), ("mm/filemap.c", "filemap_read")],
+    "readlinkat": [("fs/stat.c", "do_readlinkat"), ("fs/namei.c", "vfs_readlink")],
+    "recvfrom": [("net/socket.c", "__sys_recvfrom"), ("net/core/datagram.c", "skb_copy_datagram_iter")],
+    "sendto": [("net/socket.c", "__sys_sendto"), ("net/core/sock.c", "sock_sendmsg")],
+    "setsockopt": [("net/socket.c", "__sys_setsockopt"), ("net/core/sock.c", "sock_setsockopt")],
+    "write": [("fs/read_write.c", "ksys_write"), ("mm/filemap.c", "generic_perform_write")],
+}
+
+SOURCE_DIRS = ("arch", "block", "drivers", "fs", "include", "kernel", "mm", "net")
+SOURCE_SUBSYSTEM_HINTS = (
+    ("fs/ext4/", "ext4 filesystem"),
+    ("fs/xfs/", "xfs filesystem"),
+    ("fs/btrfs/", "btrfs filesystem"),
+    ("fs/", "VFS/filesystem"),
+    ("block/", "block layer"),
+    ("mm/", "memory management"),
+    ("net/", "network stack"),
+    ("kernel/sched/", "scheduler"),
+    ("kernel/locking/", "locking"),
+    ("kernel/rcu/", "RCU"),
+    ("kernel/cgroup/", "cgroup"),
+    ("drivers/nvme/", "NVMe driver"),
+    ("drivers/scsi/", "SCSI driver"),
+    ("drivers/", "driver"),
+    ("arch/arm64/", "arm64 architecture"),
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -174,6 +215,7 @@ def summarize_config(path: Path) -> tuple[str, str]:
 def monitor_inventory(run_dir: Path) -> dict[str, list[Path]]:
     patterns = {
         "perf": ["perf.log", "perf.err", "perf.data", "perf-lock.log", "perf-lock.err"],
+        "flamegraph": ["flamegraph.stacks", "flamegraph.errors", "flamegraph.svg"],
         "lock": ["lock-contention.csv", "lock-contention.errors", "perf-lock.log"],
         "mpstat": ["mpstat.json", "mpstat.err"],
         "iostat": ["iostat*.json", "iostat*.log", "iostat*.txt", "iostat*.err"],
@@ -227,6 +269,274 @@ def parse_mpstat(path: Path) -> dict[str, float | None]:
     return out
 
 
+def clean_symbol(symbol: str) -> str:
+    symbol = symbol.strip()
+    symbol = symbol.split("+", 1)[0]
+    symbol = COMPILER_SUFFIX_RE.sub("", symbol)
+    return symbol
+
+
+def parse_stack_file(path: Path) -> list[tuple[list[str], int]]:
+    rows = []
+    for line in path.read_text(errors="replace").splitlines():
+        if not line.strip():
+            continue
+        stack, _, count_text = line.rpartition(" ")
+        count = number(count_text)
+        if not stack or count is None:
+            continue
+        symbols = [clean_symbol(s) for s in stack.split(";") if s]
+        rows.append((symbols, int(count)))
+    return rows
+
+
+def top_stack_symbols(inv: dict[str, list[Path]], limit: int = 12) -> list[tuple[str, int, int]]:
+    totals: dict[str, int] = defaultdict(int)
+    leaves: dict[str, int] = defaultdict(int)
+    ignored = {
+        "arch_call_rest_init",
+        "arch_cpu_idle",
+        "cpu_startup_entry",
+        "cpuidle_idle_call",
+        "default_idle_call",
+        "do_idle",
+        "rest_init",
+        "start_kernel",
+        "swapper",
+        "run",
+        "el0_sync",
+        "el0_sync_handler",
+        "el0_svc",
+        "el0_svc_common",
+        "invoke_syscall",
+    }
+    for path in inv.get("flamegraph", []):
+        if path.name != "flamegraph.stacks" or path.stat().st_size <= 0:
+            continue
+        for symbols, count in parse_stack_file(path):
+            kernelish = [
+                s
+                for s in symbols
+                if s
+                and not s.startswith("[")
+                and not s.startswith("mysql_")
+                and s not in ignored
+            ]
+            for sym in set(kernelish):
+                totals[sym] += count
+            if kernelish:
+                leaves[kernelish[-1]] += count
+    ranked = sorted(totals.items(), key=lambda item: item[1], reverse=True)
+    return [(sym, samples, leaves.get(sym, 0)) for sym, samples in ranked[:limit]]
+
+
+def source_subsystem(path: str) -> str:
+    for prefix, label in SOURCE_SUBSYSTEM_HINTS:
+        if path.startswith(prefix):
+            return label
+    return "kernel source"
+
+
+def lookup_symbol_source(symbol: str, linux: Path, limit: int = 4) -> list[tuple[str, int, str]]:
+    if not linux.exists():
+        return []
+    sym = clean_symbol(symbol)
+    if not sym or sym in {"syscall", "do_el0_svc"}:
+        return []
+    cache_key = (str(linux.resolve()), sym)
+    if cache_key in SOURCE_LOOKUP_CACHE:
+        return SOURCE_LOOKUP_CACHE[cache_key][:limit]
+
+    search_roots = [str(linux / d) for d in SOURCE_DIRS if (linux / d).exists()]
+    pattern = rf"\b{re.escape(sym)}\s*\("
+    try:
+        proc = subprocess.run(
+            ["rg", "-n", "--no-heading", "--glob", "*.{c,h,S}", pattern, *search_roots],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        SOURCE_LOOKUP_CACHE[cache_key] = []
+        return []
+
+    hits = []
+    for line in proc.stdout.splitlines():
+        path_text, sep, rest = line.partition(":")
+        if not sep:
+            continue
+        lineno_text, sep, text = rest.partition(":")
+        if not sep or not lineno_text.isdigit():
+            continue
+        path = Path(path_text)
+        try:
+            rel = str(path.relative_to(linux))
+        except ValueError:
+            rel = path_text
+        text = text.strip()
+        stripped = text.lstrip()
+        score = 0
+        if not stripped or stripped.startswith(("*", "/*", "//")):
+            score -= 10
+        is_signature = bool(re.search(rf"\b{re.escape(sym)}\s*\(", text)) and ";" not in text
+        looks_like_definition = is_signature and not stripped.startswith(
+            ("return ", "if ", "while ", "for ", "case ", "switch ", "err", "ret", "status")
+        )
+        if looks_like_definition:
+            score += 20
+        elif is_signature:
+            score += 8
+        if re.search(rf"\b{re.escape(sym)}\s*\([^;]*$", text):
+            score += 4
+        if rel.endswith((".c", ".S")):
+            score += 3
+        if rel.endswith(".h"):
+            score -= 2
+        if rel.startswith("arch/") and not rel.startswith("arch/arm64/"):
+            score -= 6
+        if rel.startswith(("fs/", "block/", "kernel/", "mm/", "net/")):
+            score += 3
+        if "/staging/" in rel or "/target/" in rel:
+            score -= 4
+        hits.append((score, rel, int(lineno_text), text))
+
+    hits.sort(key=lambda h: (-h[0], h[1], h[2]))
+    result = [(rel, lineno, text) for _score, rel, lineno, text in hits[: max(limit, 8)]]
+    SOURCE_LOOKUP_CACHE[cache_key] = result
+    return result[:limit]
+
+
+def hot_source_correlations(
+    stack_symbols: list[tuple[str, int, int]], linux: Path, limit: int = 10
+) -> list[dict[str, object]]:
+    rows = []
+    for sym, inclusive, leaf in stack_symbols:
+        hits = lookup_symbol_source(sym, linux, limit=1)
+        if not hits:
+            continue
+        rel, lineno, text = hits[0]
+        rows.append(
+            {
+                "symbol": sym,
+                "inclusive": inclusive,
+                "leaf": leaf,
+                "path": rel,
+                "line": lineno,
+                "source": text,
+                "subsystem": source_subsystem(rel),
+            }
+        )
+    rows.sort(key=lambda r: -(int(r["inclusive"])))
+    return rows[:limit]
+
+
+def summarize_source_targets(correlations: list[dict[str, object]], limit: int = 3) -> str:
+    seen = []
+    for row in correlations:
+        target = f"{row['subsystem']}:{row['symbol']}@{row['path']}:{row['line']}"
+        if target not in seen:
+            seen.append(target)
+    return ", ".join(seen[:limit]) or "none"
+
+
+def extract_ops(benchmark: str) -> list[str]:
+    tokens = benchmark.split("_")
+    if tokens[:3] == ["bm", "min", "mysql"]:
+        tokens = tokens[3:]
+    if tokens[:3] == ["bm", "min", "rocks"]:
+        tokens = tokens[3:]
+    ops = []
+    skip = {"missing"}
+    for tok in tokens:
+        if tok.isdigit() or tok in skip:
+            continue
+        if tok in SYSCALL_SOURCE_MAP and tok not in ops:
+            ops.append(tok)
+    return ops
+
+
+def source_correlations(benchmark: str, linux: Path) -> list[tuple[str, str, str, bool]]:
+    out = []
+    for op in extract_ops(benchmark):
+        for rel, func in SYSCALL_SOURCE_MAP.get(op, []):
+            out.append((op, rel, func, (linux / rel).exists()))
+    return out
+
+
+def subsystem_hint(benchmark: str, inv: dict[str, list[Path]]) -> str:
+    ops = set(extract_ops(benchmark))
+    if ops & {"recvfrom", "sendto", "setsockopt"}:
+        return "network/socket path"
+    if ops & {"fsync", "fallocate", "pwrite64", "write"}:
+        return "filesystem writeback/block path"
+    if ops & {"openat", "newfstatat", "readlinkat", "getdents64", "faccessat2"}:
+        return "VFS pathname/dentry/inode path"
+    if ops & {"fcntl", "lseek", "pread64", "read"}:
+        return "VFS file operation path"
+    if any(p.name == "flamegraph.stacks" and p.stat().st_size > 0 for p in inv.get("flamegraph", [])):
+        return "kernel hot path from flamegraph stacks"
+    return "unknown kernel/user path"
+
+
+def inflection_summaries(records: list[dict[str, object]]) -> list[str]:
+    by_exec: dict[tuple[object, object, object, object], list[dict[str, object]]] = defaultdict(list)
+    for rec in records:
+        key = tuple(rec.get(k, "") for k in ("execution_type", "nb_threads", "noise", "initial_size"))
+        by_exec[key].append(rec)
+    notes = []
+    for key, vals in by_exec.items():
+        vals = [v for v in vals if v.get("throughput_min") is not None]
+        if not vals:
+            continue
+        vals.sort(key=lambda r: number(r.get("container_cnt")) or 0)
+        baseline = vals[0]
+        peak = max(vals, key=lambda r: number(r.get("throughput_min")) or 0)
+        last = vals[-1]
+        base_thr = number(baseline.get("throughput_min"))
+        peak_thr = number(peak.get("throughput_min"))
+        last_thr = number(last.get("throughput_min"))
+        if base_thr is None or peak_thr is None or last_thr is None:
+            continue
+        worst_pair = None
+        for prev, cur in zip(vals, vals[1:]):
+            prev_thr = number(prev.get("throughput_min"))
+            cur_thr = number(cur.get("throughput_min"))
+            if prev_thr and cur_thr is not None:
+                drop = 100.0 * (1.0 - (cur_thr / prev_thr))
+                if worst_pair is None or drop > worst_pair[0]:
+                    worst_pair = (drop, prev, cur)
+        exec_type = key[0]
+        peak_drop = 100.0 * (1.0 - last_thr / peak_thr) if peak_thr else 0.0
+        success_start = number(baseline.get("univ_succ_percent"))
+        success_last = number(last.get("univ_succ_percent"))
+        latency_start = number(baseline.get("univ_avg"))
+        latency_last = number(last.get("univ_avg"))
+        cpu_note = f"sys {fmt(number(last.get('sys')))}%, idle {fmt(number(last.get('idle')))}%"
+        parts = [
+            f"{exec_type}: baseline count {baseline.get('container_cnt')} throughput {fmt(base_thr)}",
+            f"peak count {peak.get('container_cnt')} throughput {fmt(peak_thr)}",
+            f"last count {last.get('container_cnt')} throughput {fmt(last_thr)}",
+            f"drop from peak {fmt(max(0.0, peak_drop))}%",
+            cpu_note,
+        ]
+        if worst_pair and worst_pair[0] > 0:
+            parts.append(
+                "largest adjacent drop {drop}% from count {a} to {b}".format(
+                    drop=fmt(worst_pair[0]),
+                    a=worst_pair[1].get("container_cnt"),
+                    b=worst_pair[2].get("container_cnt"),
+                )
+            )
+        if success_start is not None and success_last is not None:
+            parts.append(f"success {fmt(success_start)}% -> {fmt(success_last)}%")
+        if latency_start and latency_last is not None:
+            parts.append(f"latency {fmt(latency_start)} -> {fmt(latency_last)} ({latency_last / latency_start:.2f}x)")
+        notes.append("; ".join(parts))
+    return notes
+
+
 def scaling_table(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     if not rows:
         return []
@@ -236,8 +546,10 @@ def scaling_table(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     records = []
     for key, grows in groups.items():
         rec = {dim: key[i] for i, dim in enumerate(dims)}
-        rec["throughput_min"] = avg(grows, "throughput_min")
-        rec["throughput_max"] = avg(grows, "throughput_max")
+        for col in ("throughput_min", "throughput_max"):
+            vals = [number(r.get(col)) for r in grows]
+            vals = [v for v in vals if v is not None]
+            rec[col] = sum(vals) if vals else None
         rec["univ_avg"] = avg(grows, "univ_avg")
         rec["univ_succ_percent"] = avg(grows, "univ_succ_percent")
         rec["sys"] = avg(grows, "sys_c0")
@@ -281,7 +593,15 @@ def scaling_capacity_table(rows: list[dict[str, str]]) -> list[dict[str, object]
 def monitor_strength(inv: dict[str, list[Path]]) -> tuple[int, str]:
     signals = []
     score = 0
-    for name, points in (("lock", 3), ("bpftrace", 3), ("perf", 2), ("spe", 2), ("mpstat", 1), ("iostat", 1)):
+    for name, points in (
+        ("lock", 3),
+        ("bpftrace", 3),
+        ("perf", 2),
+        ("flamegraph", 2),
+        ("spe", 2),
+        ("mpstat", 1),
+        ("iostat", 1),
+    ):
         files = inv.get(name, [])
         nonempty = [p for p in files if p.stat().st_size > 0]
         if nonempty:
@@ -292,13 +612,15 @@ def monitor_strength(inv: dict[str, list[Path]]) -> tuple[int, str]:
     return score, ", ".join(signals) or "none"
 
 
-def run_degradation_summary(run: dict[str, Path | str]) -> dict[str, object]:
+def run_degradation_summary(run: dict[str, Path | str], linux: Path | None = None) -> dict[str, object]:
     base = str(run["base"])
     system, benchmark, timestamp = run_parts(base)
     _fields, rows = read_csv_rows(run["csv"])
     table = scaling_capacity_table(rows)
     inv = monitor_inventory(run["dir"])
     mon_score, mon_text = monitor_strength(inv)
+    linux = linux or Path("deps/linux")
+    source_targets = hot_source_correlations(top_stack_symbols(inv, limit=8), linux, limit=5)
 
     by_exec: dict[str, list[dict[str, object]]] = defaultdict(list)
     for rec in table:
@@ -392,6 +714,8 @@ def run_degradation_summary(run: dict[str, Path | str]) -> dict[str, object]:
         "latency_ratio": latency_ratio,
         "monitor_score": mon_score,
         "monitor_text": mon_text,
+        "source_targets": summarize_source_targets(source_targets),
+        "source_target_count": len(source_targets),
         "potential": potential,
         "patch_confidence": patch_conf,
         "score": score,
@@ -401,8 +725,9 @@ def run_degradation_summary(run: dict[str, Path | str]) -> dict[str, object]:
 
 def write_summary_report(args: argparse.Namespace) -> str:
     results_dir = Path(args.results_dir)
+    linux = Path(args.linux)
     complete, incomplete = collect_runs(results_dir)
-    summaries = [run_degradation_summary(run) for run in complete]
+    summaries = [run_degradation_summary(run, linux) for run in complete]
     summaries.sort(key=lambda r: (float(r["score"]), float(r["degradation"])), reverse=True)
 
     lines = [
@@ -424,14 +749,14 @@ def write_summary_report(args: argparse.Namespace) -> str:
     lines += [
         "## Ranked Patch-Investigation Candidates",
         "",
-        "| rank | run | benchmark | execution | count range | degradation from peak | success drop | latency ratio | monitor evidence | scaling potential | patch confidence |",
-        "|---:|---|---|---|---|---:|---:|---:|---|---|---|",
+        "| rank | run | benchmark | execution | count range | degradation from peak | success drop | latency ratio | monitor evidence | source targets | scaling potential | patch confidence |",
+        "|---:|---|---|---|---|---:|---:|---:|---|---|---|---|",
     ]
     for idx, rec in enumerate(summaries, start=1):
         count_range = f"{rec['baseline_count']} -> {rec['worst_count']}"
         lat = rec["latency_ratio"]
         lines.append(
-            "| {rank} | `{run}` | `{benchmark}` | {execution} | {count_range} | {deg} | {succ} | {lat} | {mon} | {potential} | {conf} |".format(
+            "| {rank} | `{run}` | `{benchmark}` | {execution} | {count_range} | {deg} | {succ} | {lat} | {mon} | {source} | {potential} | {conf} |".format(
                 rank=idx,
                 run=rec["base"],
                 benchmark=rec["benchmark"],
@@ -441,6 +766,7 @@ def write_summary_report(args: argparse.Namespace) -> str:
                 succ=fmt(rec["success_drop"]),
                 lat="n/a" if lat is None else f"{lat:.2f}x",
                 mon=rec["monitor_text"],
+                source=rec["source_targets"],
                 potential=rec["potential"],
                 conf=rec["patch_confidence"],
             )
@@ -453,6 +779,7 @@ def write_summary_report(args: argparse.Namespace) -> str:
         "- **Degradation from peak** compares the highest observed throughput in a run/execution type with the largest-count result for that same execution type.",
         "- **Scaling potential** estimates how much room exists to improve many-core scaling if the bottleneck is in a kernel path.",
         "- **Patch confidence** combines the benchmark inflection with available monitor evidence. It should be downgraded during detailed analysis if perf/lock/bpftrace evidence does not map to a plausible kernel path.",
+        "- **Source targets** are top flamegraph symbols resolved against `deps/linux`; they are upstream references unless the measured kernel source is an exact match.",
         "- Keep native and container results separate until explicitly comparing overheads.",
         "",
         "## Per-Run Notes",
@@ -467,6 +794,7 @@ def write_summary_report(args: argparse.Namespace) -> str:
             f"- Degradation from peak: {fmt(rec['degradation'])}%",
             f"- Potential for kernel scaling improvement: {rec['potential']}",
             f"- Confidence that a proposed kernel-scaling patch would help: {rec['patch_confidence']}",
+            f"- Hot source targets: {rec['source_targets']}",
             f"- Evidence note: {rec['note']}",
             "",
         ]
@@ -523,6 +851,8 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
         lines.append("")
         table = scaling_table(rows)
         if table:
+            lines.append("Throughput values are aggregate capacity across execution units for the same parameter point.")
+            lines.append("")
             lines.append("| execution_type | containers | throughput_min | vs baseline | univ_avg | success % | sys % | iowait % | idle % |")
             lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
             for rec in table:
@@ -542,6 +872,13 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
         else:
             lines.append("No parseable scaling rows found.")
         lines.append("")
+        inflections = inflection_summaries(table)
+        if inflections:
+            lines.append("### Inflection Points")
+            lines.append("")
+            for note in inflections:
+                lines.append(f"- {note}")
+            lines.append("")
         lines.append("### Monitor Inventory")
         lines.append("")
         for name, files in inv.items():
@@ -572,17 +909,97 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
                 samples = [v.get(key) for v in vals if v.get(key) is not None]
                 lines.append(f"- avg {key}: {fmt(mean(samples) if samples else None)}")
             lines.append("")
+        stack_symbols = top_stack_symbols(inv)
+        if stack_symbols:
+            lines.append("### Flamegraph Stack Hot Symbols")
+            lines.append("")
+            lines.append("| symbol | inclusive samples | leaf samples |")
+            lines.append("|---|---:|---:|")
+            for sym, inclusive, leaf in stack_symbols:
+                lines.append(f"| `{sym}` | {inclusive} | {leaf} |")
+            lines.append("")
+
+        lines.append("### Source Correlation")
+        lines.append("")
+        hot_sources = hot_source_correlations(stack_symbols, linux, limit=12)
+        if hot_sources:
+            lines.append("Hot symbols from `flamegraph.stacks` resolved against `deps/linux`:")
+            lines.append("")
+            lines.append("| symbol | subsystem | source | line | samples | source text |")
+            lines.append("|---|---|---|---:|---:|---|")
+            for row in hot_sources:
+                source_text = str(row["source"]).replace("|", "\\|")
+                lines.append(
+                    "| `{symbol}` | {subsystem} | `{path}` | {line} | {samples} | `{text}` |".format(
+                        symbol=row["symbol"],
+                        subsystem=row["subsystem"],
+                        path=row["path"],
+                        line=row["line"],
+                        samples=row["inclusive"],
+                        text=source_text[:160],
+                    )
+                )
+            lines.append("")
+        elif stack_symbols:
+            lines.append(
+                "Hot flamegraph symbols were present, but no exact source hits were found in `deps/linux` for the top symbols."
+            )
+            lines.append("")
+
+        correlations = source_correlations(benchmark, linux)
+        if correlations:
+            lines.append(
+                "Benchmark-name syscall/source pivots:"
+            )
+            lines.append("")
+            lines.append("| operation | source file | function/path | present |")
+            lines.append("|---|---|---|---|")
+            for op, rel, func, present in correlations:
+                lines.append(f"| `{op}` | `{rel}` | `{func}` | {'yes' if present else 'no'} |")
+        else:
+            lines.append(
+                "No syscall/source mapping was inferred from the benchmark name; use the hot symbols above for manual `rg`/`git grep` correlation."
+            )
+        lines.append("")
+
+        mon_score, mon_text = monitor_strength(inv)
+        degradation = run_degradation_summary(run, linux)
+        subsystem = subsystem_hint(benchmark, inv)
+        hot_target_text = summarize_source_targets(hot_sources)
         lines += [
-            "### Source Correlation TODO",
+            "### Hypothesis",
             "",
-            "- Search `deps/linux` for the top symbols/callers above after stripping offsets and compiler suffixes.",
-            "- Map the benchmark inflection point to the matching monitor path dimensions.",
-            "- State whether the Linux source tree matches the measured kernel or is only an upstream reference.",
+            (
+                f"- Likely bottleneck area: {subsystem}. Observed worst degradation from peak is "
+                f"{fmt(degradation['degradation'])}% for {degradation['execution_type']} at count "
+                f"{degradation['worst_count']}; monitor evidence score is {mon_score} ({mon_text})."
+            ),
+            f"- Hot source targets from flamegraph/source correlation: {hot_target_text}.",
+        ]
+        if mon_score >= 4 and degradation["degradation"] >= 60:
+            lines.append(
+                "- Confidence: medium to high for a kernel-scaling investigation, because the throughput inflection has matching monitor coverage."
+            )
+        elif mon_score > 0:
+            lines.append(
+                "- Confidence: low to medium; the benchmark signal is useful, but more targeted perf/lock/bpftrace evidence is needed before claiming a kernel root cause."
+            )
+        else:
+            lines.append(
+                "- Confidence: low; this report has benchmark scaling but little monitor evidence."
+            )
+        lines += [
             "",
-            "### Patch Direction TODO",
+            "### Patch Direction",
             "",
-            "- Identify the smallest kernel change likely to reduce the observed many-core bottleneck.",
-            "- Include affected files/functions, expected CSB metric improvement, risk, and validation reruns.",
+            (
+                f"- Target subsystem: {subsystem}. Start with the hot source targets and mapped files/functions above, "
+                "then validate with targeted perf/lock/bpftrace at baseline, peak, and largest-count points."
+            ),
+            "- Candidate change shape: reduce shared lock hold time, batch repeated per-process/container work, or move global counters/lists toward per-CPU/per-node state only if the monitor evidence confirms shared-state pressure.",
+            "- Expected CSB improvement: higher aggregate `throughput_min`, smaller drop from peak at high counts, stable `univ_succ_percent`, and no latency regression in `univ_avg`.",
+            "- Validation reruns: repeat the smallest count, peak count, largest count, and the largest adjacent-drop pair for the affected execution type; keep native and container runs separate.",
+            "- Risks to watch: fairness, memory growth, writeback ordering, socket semantics, cgroup accounting, and architecture-specific behavior on aarch64.",
             "",
         ]
     return "\n".join(lines)
