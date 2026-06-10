@@ -1,18 +1,11 @@
 ---
 name: csb-syzkaller
-description: "Use when working on CSB's deps/syzkaller fork or bm-generator pipeline: parsing strace logs into syzlang programs, extracting/minimizing syscall programs, converting syz programs into CSB C headers, generating benchmark JSON configs, debugging generated microbenchmarks, or validating the Go/tool build environment. Do not use for ordinary CSB runner/config work unless syzkaller-generated benchmarks are involved."
+description: "Use for operating CSB's syzkaller-based benchmark generation workflow: preparing the bm-generator environment, parsing strace logs, extracting syz programs, generating or refreshing CSB C headers and JSON configs, selecting generated benchmarks, and adapting generated benchmark configs for runs. Do not use for modifying syzkaller internals or generator code; use csb-syzkaller-dev."
 ---
 
-# CSB Syzkaller Generator
+# CSB Syzkaller Usage
 
-This skill covers the CSB-specific syzkaller fork under `deps/syzkaller` and the CSB `bm-generator/` scripts that turn captured `strace` logs into runnable CSB microbenchmarks.
-
-## Boundaries
-
-- Treat `deps/syzkaller` as its own git repository/submodule. Check its status and history separately from the CSB root.
-- Use the general `csb` skill for `bm-runner/`, normal benchmark configs, monitors, plots, and container/native execution behavior.
-- Use this skill when the work touches syzkaller tools, syzlang `.prog` files, generated headers under `bench/targets/<group>/syz`, or generated configs under `config/<group>`.
-- Generated benchmark artifacts are often untracked. Do not delete or overwrite them unless the user asked for regeneration or cleanup.
+Use this skill to run the CSB `bm-generator/` pipeline and refresh generated benchmark artifacts. Stay on operational workflow, inputs, outputs, and generated config/header adoption. If the task requires changing `deps/syzkaller`, parser/extractor/prog2c code, syzlang internals, Go tests, or generator implementation, use `csb-syzkaller-dev`.
 
 ## First Checks
 
@@ -21,37 +14,44 @@ From the CSB root:
 ```bash
 git status --short
 git -C deps/syzkaller status --short
-git -C deps/syzkaller log --oneline --decorate --max-count=50
-rg --files bm-generator deps/syzkaller/tools/syz-trace2syz deps/syzkaller/tools/syz-extraction deps/syzkaller/tools/syz-prog2c deps/syzkaller/prog deps/syzkaller/pkg/csource
+sed -n '1,220p' bm-generator/README.md 2>/dev/null || true
+rg --files bm-generator config bench/targets deps/syzkaller/bin -g '*.sh' -g '*.json' -g '*.h' -g '*.prog'
 ```
 
-For code search, focus first on:
+Inspect existing generated groups:
 
 ```bash
-rg '<term>' bm-generator deps/syzkaller/tools/syz-trace2syz deps/syzkaller/tools/syz-extraction deps/syzkaller/tools/syz-prog2c deps/syzkaller/prog deps/syzkaller/pkg/csource
+find bench/targets -path '*/syz/*.h' | head
+find config -name 'bm_min_*.json' | head
 ```
 
-## Fork Purpose
+## Prepare The Generator Environment
 
-The fork is an end-to-end microbenchmark generator for captured program executions:
-
-1. parse `strace` logs into syzlang programs;
-2. preserve strace thread IDs and syscall return values in `.prog` serialization;
-3. extract smaller syscall programs that resemble kernel task slices from the captured execution;
-4. sanitize paths, file descriptors, socket/network arguments, buffers, and unsupported calls so generated programs can replay as benchmarks;
-5. convert syzlang programs into CSB C headers;
-6. generate JSON configuration files that let CSB run those headers as automatic benchmarks.
-
-The CSB commit series starts at `f267c75ad Enables CSB generation` and, through `252d6d55b`, adds CSB C generation, strace return/TID annotations, faster dependency-based extraction, deterministic thread ordering, network-server extraction support, metadata generation, FD leak handling, path/bind/connect sanitization, write-buffer alignment, and build/test workflow fixes.
-
-## Generator Pipeline
-
-Run numbered scripts from `bm-generator/`.
+Run numbered scripts from `bm-generator/`:
 
 ```bash
 cd bm-generator
 ./00_init.sh
 ./01_build.sh
+```
+
+Important variables:
+
+- `DIR_SYZ_SRC`: syzkaller source directory; defaults through `../build/syzkaller-path.txt`.
+- `CSB_RESULTS_GROUP`: generated target/config group; defaults to `gen-ws`.
+- `JOBS`: parallelism; defaults to `nproc`.
+- `MINCALLS`: minimum calls retained during extraction; defaults to `10`.
+- `DIR_PROG`: input/output `.prog` directory for parse/extract/prepare steps.
+- `DIR_OUT`: extraction output directory.
+
+`00_init.sh` checks Go version. `01_build.sh` builds CSB syzkaller tools through the project build. If Go/tool caches fail because of sandboxing, request normal cache access rather than redirecting caches into the repo.
+
+## Generate From A Trace
+
+Typical pipeline:
+
+```bash
+cd bm-generator
 ./02_parse.sh /path/to/strace.log
 ./03_extract.sh
 ./04_prepare.sh
@@ -59,79 +59,41 @@ cd bm-generator
 ./06_select.sh
 ```
 
-Important environment variables:
+Pipeline outputs:
 
-- `DIR_SYZ_SRC`: syzkaller source directory; defaults to `../build/syzkaller-path.txt` via `helper/find_syzkaller_src.sh`.
-- `DIR_PROG`: input/output `.prog` directory depending on step; defaults to `./deserialized` for parse/extract input and `./extracted` for prepare input.
-- `DIR_OUT`: extraction output directory; defaults to `./extracted`.
-- `MINCALLS`: minimum calls retained by `syz-extraction`; defaults to `10` in `03_extract.sh`.
-- `JOBS`: parallelism; defaults to `nproc`.
-- `CSB_RESULTS_GROUP`: workspace/group name for generated targets/config/results; defaults to `gen-ws`.
+- parsed `.prog` files under `bm-generator/deserialized`;
+- extracted/minimized `.prog` files under `bm-generator/extracted`;
+- generated CSB headers under `bench/targets/<group>/syz`;
+- generated JSON configs under `config/<group>`;
+- selection/merge outputs from `06_select.sh`.
 
-Pipeline details:
+Script details:
 
-- `00_init.sh` requires Go >= 1.25 and can call `helper/install_go.sh`.
-- `01_build.sh` checks `go env GOBIN`, configures CSB with `CSB_BM_GENERATOR=ON` if needed, then builds the syzkaller tools through CMake.
-- `02_parse.sh` requires an empty deserialization directory and runs `bin/syz-trace2syz -vv 0 -file <trace> --deserialize <dir> --nocorpus`, then compares syscall distributions with `helper/compare_strace_to_syzprog.sh`.
-- `03_extract.sh` runs `bin/syz-extraction -prog <file> -deserialize <dir> -minCalls <MINCALLS>` for each parsed program and prunes empty output directories.
-- `04_prepare.sh` converts each extracted `.prog` with `helper/prog2bm.sh`, which runs `bin/syz-prog2c -csb -trace=true -format=false -prog <prog> -cfile ../bench/targets/<group>/syz/<name>.h`.
-- `05_generate.sh` builds template targets `syz_single.h.in` and `bm_single.json.in`, producing C headers/configs through the CSB template machinery.
+- `02_parse.sh` requires an empty deserialization directory and runs `syz-trace2syz`; it also compares syscall distributions against the trace.
+- `03_extract.sh` runs `syz-extraction` for each parsed program and prunes empty outputs.
+- `04_prepare.sh` runs `helper/prog2bm.sh`, producing C headers.
+- `05_generate.sh` uses CSB templates (`syz_single.h.in`, `bm_single.json.in`) to produce headers/configs.
 - `06_select.sh` runs generated configs through flamegraph-based selection and merges selected benchmarks.
 
-## Syzkaller Areas
+## Refresh Headers And Configs After Changes
 
-Core CSB changes live in:
+When generated code/configs are stale after trace, `.prog`, template, or metadata changes:
 
-- `tools/syz-trace2syz/`: strace lexer/parser/proggen changes, `-deserialize`, `-nocorpus`, `-topCalls`, `-splitThreads`, and `-argLength`.
-- `prog/`: serialization of strace TID as `<tid>` and syscall return as `[ret]`, cloning annotations, call dependency annotations, and extraction-oriented minimization.
-- `tools/syz-extraction/`: extraction CLI, dependency minimization, poll filtering, minimum program size, deterministic TID iteration, and network-server split handling.
-- `tools/syz-prog2c/` and `pkg/csource/`: `-csb` header generation, syscall tracing, path/socket/file sanitization, FD leak handling, shared write/send buffers, metadata, and CSB benchmark config output.
-- `executor/common*.h` and `sys/linux/sys.txt*`: runtime helpers and syscall description adjustments needed by generated C.
-- `Makefile`: CSB tool targets `trace2syz`, `prog2c`, and `extraction`.
-
-When changing parser syntax, check whether generated parser files need regeneration:
+1. Identify the group:
 
 ```bash
-cd deps/syzkaller
-make generate_trace2syz
+export CSB_RESULTS_GROUP=<group>
 ```
 
-## Build And Tests
+2. Re-run the smallest needed suffix of the pipeline:
 
-For operational validation, build the tools from `deps/syzkaller`:
+- Changed trace parsing input: rerun from `02_parse.sh`.
+- Changed extraction settings or selected `.prog`: rerun from `03_extract.sh`.
+- Changed `.prog` contents or `prog2bm` output inputs: rerun from `04_prepare.sh`.
+- Changed templates or config metadata: rerun `05_generate.sh`.
+- Changed selection criteria: rerun `06_select.sh`.
 
-```bash
-cd deps/syzkaller
-make trace2syz prog2c extraction
-```
-
-Useful focused Go tests:
-
-```bash
-cd deps/syzkaller
-go test ./tools/syz-trace2syz/parser ./tools/syz-trace2syz/proggen
-go test ./prog ./pkg/csource
-go test ./tools/syz-extraction ./tools/syz-prog2c ./tools/syz-trace2syz
-```
-
-Full syzkaller tests:
-
-```bash
-cd deps/syzkaller
-make test
-```
-
-Environment notes:
-
-- The current CSB workflow expects Go 1.25 or newer. `00_init.sh` checks this.
-- Syzkaller's Makefile sets `GOBIN` to `deps/syzkaller/bin` while building tools.
-- Plain `go test` uses the user's normal `GOCACHE`, `GOMODCACHE`, and compiler caches. In sandboxed environments this may require approval if caches such as `~/.ccache` are not writable.
-- Syzkaller's Makefile warns that `tools/syz-env` is preferred for upstream compatibility; report this warning, but it is not itself a failure.
-- On the current fork, tool builds can pass while some legacy upstream tests fail because tests still expect old function signatures or serialization without CSB `[ret]` annotations. Treat those as test-suite drift unless the user is specifically asking to repair tests.
-
-## Generated Output Checks
-
-After a generation run, inspect:
+3. Inspect outputs:
 
 ```bash
 find bm-generator/deserialized bm-generator/extracted -name '*.prog' | head
@@ -139,20 +101,27 @@ find bench/targets/"${CSB_RESULTS_GROUP:-gen-ws}"/syz -name '*.h' | head
 find config/"${CSB_RESULTS_GROUP:-gen-ws}" -name '*.json' | head
 ```
 
-Sanity checks:
+4. Validate configs and run with the usage `csb` skill:
 
-- `.prog` names are derived from the trace filename prefix and top syscall names.
-- Extracted files are named `min_<prefix>_<top-calls>_<index>.prog`.
-- Generated headers should live under `bench/targets/<group>/syz`.
-- Generated configs should reference the generated benchmark names and keep CSB `operations` totals valid.
-- `compare_strace_to_syzprog.sh` reports syscall coverage and lost syscall names after parsing.
+```bash
+python3 -m json.tool config/"${CSB_RESULTS_GROUP:-gen-ws}"/<file>.json >/dev/null
+scripts/run-single.sh config/"${CSB_RESULTS_GROUP:-gen-ws}"/<file>.json
+```
 
-## Common Failure Modes
+## Adapt Generated Configs For Benchmarks
 
-- `DIR_PROG` not empty in `02_parse.sh`: move or clean the output directory before parsing.
-- Syzkaller source not found: run `01_build.sh`, configure CSB with `CSB_BM_GENERATOR=ON`, or pass `DIR_SYZ_SRC=/path/to/syzkaller`.
-- Missing `GOBIN`: set it with `go env -w GOBIN=$HOME/.local/bin` and ensure it is on `PATH`.
-- Build fails on cache paths under sandboxing: rerun with normal cache access approval; do not redirect caches into the repo unless the user wants that.
-- Generated headers/configs collide with old outputs: use `bm-generator/99_clean.sh` carefully; it supports dry-run by default, `-f` to force, and `-a` for deserialized/extracted/build/config cleanup.
-- Network traces may need the network-server extraction paths rather than treating all threads as one flat program; inspect `-splitThreads`, TID annotations, accept/connect/bind handling, and unsupported syscall filtering.
+Generated configs can be adjusted for a specific benchmark campaign:
 
+- Keep `applications.name` aligned with the generated header/target name.
+- Keep generated `operations` totals valid.
+- Adjust `duration`, repeats, `container_list`, execution type, monitors, and plots for the experiment.
+- Preserve generator metadata paths used by plugins, especially network-agent metadata for network traces.
+- Prefer copying generated configs to a named experiment file instead of editing generated originals when experimenting.
+
+## Common Operational Failures
+
+- `DIR_PROG` not empty during parse: move/clean the output directory before parsing.
+- Syzkaller source not found: run `01_build.sh`, configure CSB with `CSB_BM_GENERATOR=ON`, or set `DIR_SYZ_SRC`.
+- Missing `GOBIN`: set `go env -w GOBIN=$HOME/.local/bin` and ensure it is on `PATH`.
+- Header/config collisions: inspect `bm-generator/99_clean.sh`; it dry-runs by default, `-f` forces cleanup, `-a` includes broad cleanup.
+- Network traces may need server/client split-aware extraction; check generated metadata and selected programs before running CSB.
