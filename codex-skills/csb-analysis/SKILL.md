@@ -40,6 +40,13 @@ python3 /etc/codex/skills/csb-analysis/scripts/md_to_html.py results/<analysis-f
 For "all results", create independent per-run documents first; then add or update the separate cross-run synthesis, and keep cross-run conclusions explicitly separate from per-run findings.
 
 8. The cross-run summary must collect the essential many-core degradation information from all analyzed runs, estimate the potential for kernel scaling improvement, and rank tests by confidence that a proposed kernel-scaling patch would improve large many-core scaling. Treat the ranking as triage: it should combine benchmark degradation, success/latency movement, monitor evidence strength, and source-correlation plausibility. Do not claim a patch will help from degradation alone.
+9. The cross-run summary and every detailed run report must use local Markdown links for files they reference whenever practical. In particular:
+   - Link each run's original result HTML, e.g. `[result html](benchmark_<...>.html)`.
+   - Link each generated detailed analysis HTML from the summary, e.g. `[analysis html](benchmark_<...>_csb-analysis.html)`.
+   - Link Linux source files referenced in source-correlation tables or notes, using paths relative to the report location, e.g. `[fs/sync.c:180](../deps/linux/fs/sync.c#L180)`.
+   - Prefer linked paths over plain backticked paths for navigational targets; keep non-file identifiers such as symbols, benchmark names, and execution types in backticks.
+10. When the user asks to prepare kernel patches, create per-run patch-series artifacts instead of editing the benchmark evidence reports in place. For each run directory, create a descriptive folder such as `patch-series-ext4-fsync-flush-coalescing/` or `patch-series-vfs-namei-negative-lookup-cache/`. Put the generated patch file and its safety/implications documentation in that folder, and update a global index such as `results/kernel_patch_preparation_summary.md`.
+11. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing result HTML or analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)`, not the shallower summary/report path.
 
 ## Evidence Rules
 
@@ -75,6 +82,7 @@ Write the final analysis as a technical document, not a raw dump:
 - Inflection points: where throughput stops scaling, success drops, latency jumps, idle falls, or kernel time grows.
 - Monitor evidence: summarize top perf symbols, lock callers, mpstat/iostat pressure, SPE/bpftrace observations, and failed/missing monitors.
 - Source correlation: map symbols/callers to `deps/linux` files/functions, explain relevant code paths, and cite the search method.
+- Navigation links: locally link referenced original result HTML, generated analysis HTML, and Linux source files/line anchors so readers can move directly from summaries to detailed evidence and source.
 - Hypothesis: explain the likely bottleneck and confidence level.
 - Patch proposal: state concrete kernel change direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
 - Cross-run summary: table of all analyzed runs ranked by many-core degradation, monitor evidence, potential kernel scaling improvement, and confidence that a proposed patch would improve large many-core scaling; include short per-run notes and caveats.
@@ -89,3 +97,68 @@ The patch proposal can be a design note or pseudo-diff unless the user asks for 
 - alternative mitigations considered;
 - validation metrics from CSB that should improve;
 - regressions to watch, especially memory use, fairness, latency tail, ABI behavior, and architecture-specific behavior.
+
+## Patch-Series Preparation
+
+Use this section when the user asks to prepare the most profitable kernel patches, patch series, patch files, or per-run patch folders from analyzed CSB results.
+
+1. Start from the completed per-run analysis reports and the cross-run summary. Identify every complete run under `results/`, and also list incomplete run directories separately so they do not silently disappear.
+2. Select the most profitable patch theme per run using evidence, not degradation alone. Prefer high-confidence themes where throughput collapse, latency/success movement, monitor data, and source correlation point to the same kernel subsystem. Lower-confidence or incomplete runs may receive diagnostic/RFC patches, but the documentation must say so plainly.
+3. Create one patch-series directory per run:
+
+```text
+results/<run>/patch-series-<short-change-name>/
+```
+
+Name the directory after the proposed change rather than a generic label. Examples:
+
+- `patch-series-ext4-fsync-flush-coalescing`
+- `patch-series-ext4-fallocate-preallocation-fastpath`
+- `patch-series-vfs-may-access-fastperm`
+- `patch-series-vfs-namei-negative-lookup-cache`
+- `patch-series-vfs-read-write-iter-fastpath`
+- `patch-series-net-socket-batching`
+
+4. Put the patch file in that folder with a reviewable subject-based name, for example:
+
+```text
+0001-rfc-ext4-add-opt-in-fsync-flush-coalescing.patch
+0001-rfc-ext4-fast-preallocated-keep-size-fallocate.patch
+0001-vfs-skip-generic-permission-for-may-access.patch
+```
+
+If the implementation is not production-ready, mark the patch subject and filename as `rfc`. Do not apply generated RFC patches to `deps/linux` unless the user explicitly asks.
+
+5. Add both `SAFETY_IMPLICATIONS_AND_DESCRIPTION.md` and `README.md` to the patch-series folder. The two files may have the same content for easy navigation. Each document must include:
+
+- run identity, benchmark name, and completeness;
+- link to the local patch file;
+- links to the detailed Markdown/HTML report and original result HTML when present;
+- link back to the cross-run summary;
+- source-correlation links to `deps/linux` paths with correct relative paths from the patch-series folder;
+- why this patch was selected and why it is expected to be profitable;
+- what the patch changes at the subsystem/function level;
+- safety level and assumptions;
+- implications for semantics, latency, throughput, memory, fairness, crash consistency, permissions, LSM/fsnotify/accounting, cgroups, and architecture-specific behavior as applicable;
+- validation checklist and benchmark rerun matrix.
+
+6. Add or update `results/kernel_patch_preparation_summary.md`. It should be a concise index of all per-run patch-series folders with columns for run, patch series, theme, degradation, confidence, detailed report link, and original result HTML link. Missing artifacts must be written as `missing`, not linked.
+
+## Patch Validation And Sanity Checks
+
+Before reporting patch preparation as complete:
+
+- Count patch-series directories and ensure the count matches the intended run set.
+- Count patch files and ensure each patch-series directory has exactly the expected patch file(s).
+- Verify every patch-series folder has `README.md` and `SAFETY_IMPLICATIONS_AND_DESCRIPTION.md`.
+- Check for stale shallow kernel-source links in nested patch docs:
+
+```bash
+rg -n '\]\(\.\./deps/linux/' results -g 'SAFETY_IMPLICATIONS_AND_DESCRIPTION.md' -g 'README.md'
+```
+
+This should return no matches for nested patch-series documents.
+
+- Resolve Markdown links from their containing file. A simple local resolver should strip anchors such as `#L180`, ignore external URLs, and report missing local files. The expected result for generated patch-preparation docs is `missing_links=0`.
+- For incomplete runs, verify that documentation explicitly says which artifacts are missing and does not contain broken links to absent `.html` reports.
+- Do not claim that a generated RFC patch is upstreamable or production-safe until it has been applied to a clean kernel tree, built, checked with `scripts/checkpatch.pl`, tested with relevant subsystem tests, and rerun against the selected CSB counts.
