@@ -30,6 +30,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--linux", default="deps/linux", help="Linux source directory to reference")
     parser.add_argument("--no-html", action="store_true", help="Do not write adjacent HTML for Markdown outputs")
+    parser.add_argument(
+        "--summary-out",
+        help=(
+            "Write a cross-run summary Markdown file after per-run reports. "
+            "Use with placeholder --out to keep per-run analysis independent."
+        ),
+    )
     parser.add_argument("--top-locks", type=int, default=8)
     parser.add_argument("--top-monitor-files", type=int, default=80)
     return parser.parse_args()
@@ -127,7 +134,7 @@ def discover_runs(results_dir: Path):
     for p in results_dir.iterdir() if results_dir.exists() else []:
         if p.is_dir():
             bases.add(p.name)
-        elif p.suffix in {".json", ".html", ".csv"}:
+        elif p.suffix in {".json", ".csv"}:
             bases.add(p.stem)
     for base in sorted(bases):
         yield {
@@ -251,6 +258,219 @@ def scaling_table(rows: list[dict[str, str]]) -> list[dict[str, object]]:
         val = rec.get("throughput_min")
         rec["throughput_vs_base_pct"] = (100.0 * val / base) if base and val is not None else None
     return records
+
+
+def scaling_capacity_table(rows: list[dict[str, str]]) -> list[dict[str, object]]:
+    if not rows:
+        return []
+    dims = [k for k in ("execution_type", "nb_threads", "noise", "initial_size", "container_cnt") if k in rows[0]]
+    groups = grouped(rows, dims)
+    records = []
+    for key, grows in groups.items():
+        rec = {dim: key[i] for i, dim in enumerate(dims)}
+        vals = [number(r.get("throughput_min")) for r in grows]
+        vals = [v for v in vals if v is not None]
+        rec["throughput_min"] = sum(vals) if vals else None
+        rec["univ_avg"] = avg(grows, "univ_avg")
+        rec["univ_succ_percent"] = avg(grows, "univ_succ_percent")
+        records.append(rec)
+    records.sort(key=lambda r: (str(r.get("execution_type", "")), number(r.get("container_cnt")) or 0))
+    return records
+
+
+def monitor_strength(inv: dict[str, list[Path]]) -> tuple[int, str]:
+    signals = []
+    score = 0
+    for name, points in (("lock", 3), ("bpftrace", 3), ("perf", 2), ("spe", 2), ("mpstat", 1), ("iostat", 1)):
+        files = inv.get(name, [])
+        nonempty = [p for p in files if p.stat().st_size > 0]
+        if nonempty:
+            score += points
+            signals.append(f"{name}:{len(nonempty)}")
+        elif files:
+            signals.append(f"{name}:empty")
+    return score, ", ".join(signals) or "none"
+
+
+def run_degradation_summary(run: dict[str, Path | str]) -> dict[str, object]:
+    base = str(run["base"])
+    system, benchmark, timestamp = run_parts(base)
+    _fields, rows = read_csv_rows(run["csv"])
+    table = scaling_capacity_table(rows)
+    inv = monitor_inventory(run["dir"])
+    mon_score, mon_text = monitor_strength(inv)
+
+    by_exec: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for rec in table:
+        by_exec[str(rec.get("execution_type", "unknown"))].append(rec)
+
+    best_exec = "n/a"
+    best_peak = None
+    worst_rec = None
+    worst_degradation = None
+    success_drop = None
+    latency_ratio = None
+    baseline_count = "n/a"
+
+    for execution_type, records in by_exec.items():
+        records = [r for r in records if r.get("throughput_min") is not None]
+        if not records:
+            continue
+        records.sort(key=lambda r: number(r.get("container_cnt")) or 0)
+        baseline = records[0]
+        peak = max(number(r.get("throughput_min")) or 0 for r in records)
+        last = records[-1]
+        last_thr = number(last.get("throughput_min"))
+        if peak <= 0 or last_thr is None:
+            continue
+        degradation = max(0.0, 100.0 * (1.0 - (last_thr / peak)))
+        base_success = number(baseline.get("univ_succ_percent"))
+        last_success = number(last.get("univ_succ_percent"))
+        this_success_drop = (base_success - last_success) if base_success is not None and last_success is not None else None
+        base_lat = number(baseline.get("univ_avg"))
+        last_lat = number(last.get("univ_avg"))
+        this_latency_ratio = (last_lat / base_lat) if base_lat and last_lat is not None else None
+        if worst_degradation is None or degradation > worst_degradation:
+            best_exec = execution_type
+            best_peak = peak
+            worst_rec = last
+            worst_degradation = degradation
+            success_drop = this_success_drop
+            latency_ratio = this_latency_ratio
+            baseline_count = baseline.get("container_cnt", "n/a")
+
+    worst_count = worst_rec.get("container_cnt", "n/a") if worst_rec else "n/a"
+    worst_thr = number(worst_rec.get("throughput_min")) if worst_rec else None
+    worst_degradation = worst_degradation if worst_degradation is not None else 0.0
+
+    score = worst_degradation
+    if success_drop:
+        score += min(15.0, max(0.0, success_drop))
+    if latency_ratio and latency_ratio > 1.0:
+        score += min(15.0, (latency_ratio - 1.0) * 5.0)
+    score += min(15.0, mon_score * 2.5)
+
+    if worst_degradation >= 80 and mon_score >= 4:
+        patch_conf = "high"
+    elif worst_degradation >= 60 and mon_score >= 2:
+        patch_conf = "medium"
+    elif worst_degradation >= 40:
+        patch_conf = "low-medium"
+    else:
+        patch_conf = "low"
+
+    if worst_degradation >= 80:
+        potential = "large"
+    elif worst_degradation >= 60:
+        potential = "moderate-large"
+    elif worst_degradation >= 40:
+        potential = "moderate"
+    else:
+        potential = "limited"
+
+    if not table:
+        note = "No parseable scaling rows; cannot rank confidently."
+    elif mon_score == 0:
+        note = "Scaling signal only; monitor evidence missing or empty."
+    elif mon_score < 3:
+        note = "Monitor evidence is partial; needs targeted perf/lock/bpftrace before patch claims."
+    else:
+        note = "Benchmark degradation has matching monitor coverage; good candidate for deeper source correlation."
+
+    return {
+        "base": base,
+        "system": system,
+        "benchmark": benchmark,
+        "timestamp": timestamp,
+        "execution_type": best_exec,
+        "baseline_count": baseline_count,
+        "worst_count": worst_count,
+        "peak_throughput": best_peak,
+        "worst_throughput": worst_thr,
+        "degradation": worst_degradation,
+        "success_drop": success_drop,
+        "latency_ratio": latency_ratio,
+        "monitor_score": mon_score,
+        "monitor_text": mon_text,
+        "potential": potential,
+        "patch_confidence": patch_conf,
+        "score": score,
+        "note": note,
+    }
+
+
+def write_summary_report(args: argparse.Namespace) -> str:
+    results_dir = Path(args.results_dir)
+    complete, incomplete = collect_runs(results_dir)
+    summaries = [run_degradation_summary(run) for run in complete]
+    summaries.sort(key=lambda r: (float(r["score"]), float(r["degradation"])), reverse=True)
+
+    lines = [
+        "# CSB Cross-Run Scaling Summary",
+        "",
+        f"- Results directory: `{results_dir}`",
+        f"- Complete analyzed runs: {len(complete)}",
+        f"- Incomplete runs skipped: {len(incomplete)}",
+        "",
+        "This summary ranks independently analyzed runs by observed many-core scaling degradation and the strength of supporting monitor evidence. It is a triage ranking for kernel patch investigation, not proof that a patch will improve performance.",
+        "",
+    ]
+    if incomplete:
+        lines += ["## Skipped Incomplete Runs", ""]
+        for run, missing in incomplete:
+            lines.append(f"- `{run['base']}` missing: {', '.join(missing)}")
+        lines.append("")
+
+    lines += [
+        "## Ranked Patch-Investigation Candidates",
+        "",
+        "| rank | run | benchmark | execution | count range | degradation from peak | success drop | latency ratio | monitor evidence | scaling potential | patch confidence |",
+        "|---:|---|---|---|---|---:|---:|---:|---|---|---|",
+    ]
+    for idx, rec in enumerate(summaries, start=1):
+        count_range = f"{rec['baseline_count']} -> {rec['worst_count']}"
+        lat = rec["latency_ratio"]
+        lines.append(
+            "| {rank} | `{run}` | `{benchmark}` | {execution} | {count_range} | {deg} | {succ} | {lat} | {mon} | {potential} | {conf} |".format(
+                rank=idx,
+                run=rec["base"],
+                benchmark=rec["benchmark"],
+                execution=rec["execution_type"],
+                count_range=count_range,
+                deg=fmt(rec["degradation"]),
+                succ=fmt(rec["success_drop"]),
+                lat="n/a" if lat is None else f"{lat:.2f}x",
+                mon=rec["monitor_text"],
+                potential=rec["potential"],
+                conf=rec["patch_confidence"],
+            )
+        )
+
+    lines += [
+        "",
+        "## Interpretation Guide",
+        "",
+        "- **Degradation from peak** compares the highest observed throughput in a run/execution type with the largest-count result for that same execution type.",
+        "- **Scaling potential** estimates how much room exists to improve many-core scaling if the bottleneck is in a kernel path.",
+        "- **Patch confidence** combines the benchmark inflection with available monitor evidence. It should be downgraded during detailed analysis if perf/lock/bpftrace evidence does not map to a plausible kernel path.",
+        "- Keep native and container results separate until explicitly comparing overheads.",
+        "",
+        "## Per-Run Notes",
+        "",
+    ]
+    for rec in summaries:
+        lines += [
+            f"### {rec['base']}",
+            "",
+            f"- Benchmark: `{rec['benchmark']}`",
+            f"- Worst scaling dimension: {rec['execution_type']} count {rec['baseline_count']} -> {rec['worst_count']}",
+            f"- Degradation from peak: {fmt(rec['degradation'])}%",
+            f"- Potential for kernel scaling improvement: {rec['potential']}",
+            f"- Confidence that a proposed kernel-scaling patch would help: {rec['patch_confidence']}",
+            f"- Evidence note: {rec['note']}",
+            "",
+        ]
+    return "\n".join(lines)
 
 
 def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | None = None) -> str:
@@ -398,11 +618,19 @@ def main() -> None:
             out = resolve_out_path(args.out, run)
             write_markdown_and_html(out, report, not args.no_html)
             print(out)
+        if args.summary_out:
+            summary_out = Path(args.summary_out)
+            write_markdown_and_html(summary_out, write_summary_report(args), not args.no_html)
+            print(summary_out)
     else:
         report = write_report(args)
         out = Path(args.out)
         write_markdown_and_html(out, report, not args.no_html)
         print(out)
+        if args.summary_out:
+            summary_out = Path(args.summary_out)
+            write_markdown_and_html(summary_out, write_summary_report(args), not args.no_html)
+            print(summary_out)
 
 
 if __name__ == "__main__":
