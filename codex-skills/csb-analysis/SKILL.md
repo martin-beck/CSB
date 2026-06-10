@@ -14,11 +14,12 @@ Analyze CSB result runs as separate experiments, then connect benchmark scaling 
 3. For every complete run, generate a separate first-pass evidence report. Prefix every analysis Markdown filename with the same run-style prefix used by the results basename: `benchmark_<systemname>...`. Prefer `{base}` so the Markdown filename starts with the exact complete run basename and cannot collide with another run:
 
 ```bash
-python3 /etc/codex/skills/csb-analysis/scripts/csb_result_report.py results --out 'results/{base}_csb-analysis.md'
+python3 /etc/codex/skills/csb-analysis/scripts/csb_result_report.py results \
+  --out 'results/{base}_csb-analysis.md' \
+  --summary-out results/benchmark_scaling_summary.md
 ```
 
-The report helper writes one Markdown file per complete run when the `--out` path contains placeholders.
-It also writes an adjacent `.html` file for each Markdown report by default.
+The report helper writes one Markdown file per complete run when the `--out` path contains placeholders. It also writes a cross-run summary when `--summary-out` is set, and writes adjacent `.html` files for all Markdown reports by default.
 
 4. For each generated run-prefixed report, inspect that run's highest-degradation parameter points and monitor files directly before moving to the next benchmark. Reset the analysis state between runs: recompute baselines, inflection points, monitor summaries, source-correlation candidates, and hypotheses from that run's CSV and monitor artifacts only.
 5. Ensure Linux source exists in `deps/linux`; if absent, clone it before making source-code claims:
@@ -36,7 +37,9 @@ If the running kernel is distro-patched, prefer matching sources when available;
 python3 /etc/codex/skills/csb-analysis/scripts/md_to_html.py results/<analysis-file>.md
 ```
 
-For "all results", create independent per-run documents first; only then add a separate cross-run synthesis, and keep cross-run conclusions explicitly separate from per-run findings.
+For "all results", create independent per-run documents first; then add or update the separate cross-run synthesis, and keep cross-run conclusions explicitly separate from per-run findings.
+
+8. The cross-run summary must collect the essential many-core degradation information from all analyzed runs, estimate the potential for kernel scaling improvement, and rank tests by confidence that a proposed kernel-scaling patch would improve large many-core scaling. Treat the ranking as triage: it should combine benchmark degradation, success/latency movement, monitor evidence strength, and source-correlation plausibility. Do not claim a patch will help from degradation alone.
 
 ## Evidence Rules
 
@@ -48,6 +51,7 @@ For "all results", create independent per-run documents first; only then add a s
 - Call out missing monitors, empty files, failed monitor commands, and partial runs.
 - Keep native process and container results separate unless drawing an explicit overhead comparison.
 - Avoid claiming a kernel root cause from one signal alone. Require at least a benchmark inflection plus a matching monitor signal plus plausible source-code path.
+- In cross-run summaries, rank patch-investigation confidence separately from observed degradation. A severe throughput cliff with missing monitor/source evidence is a high degradation result, but not a high-confidence patch target yet.
 
 ## Monitor Triage
 
@@ -73,6 +77,7 @@ Write the final analysis as a technical document, not a raw dump:
 - Source correlation: map symbols/callers to `deps/linux` files/functions, explain relevant code paths, and cite the search method.
 - Hypothesis: explain the likely bottleneck and confidence level.
 - Patch proposal: state concrete kernel change direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
+- Cross-run summary: table of all analyzed runs ranked by many-core degradation, monitor evidence, potential kernel scaling improvement, and confidence that a proposed patch would improve large many-core scaling; include short per-run notes and caveats.
 
 ## Patch Proposal Discipline
 
