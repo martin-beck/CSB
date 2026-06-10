@@ -8,6 +8,7 @@ import csv
 import importlib.util
 import json
 import math
+import os
 import re
 import subprocess
 from collections import defaultdict
@@ -139,6 +140,19 @@ def avg(rows: list[dict[str, str]], col: str) -> float | None:
 
 def fmt(v: float | None, digits: int = 2) -> str:
     return "n/a" if v is None else f"{v:.{digits}f}"
+
+
+def md_link(label: str, href: str) -> str:
+    label = label.replace("[", "\\[").replace("]", "\\]")
+    href = href.replace(" ", "%20")
+    return f"[{label}]({href})"
+
+
+def local_file_link(label: str, target: Path, from_dir: Path, line: int | None = None) -> str:
+    rel = Path(os.path.relpath(target, from_dir)).as_posix()
+    if line is not None:
+        rel = f"{rel}#L{line}"
+    return md_link(label, rel)
 
 
 def run_parts(base: str) -> tuple[str, str, str]:
@@ -432,10 +446,18 @@ def hot_source_correlations(
     return rows[:limit]
 
 
-def summarize_source_targets(correlations: list[dict[str, object]], limit: int = 3) -> str:
+def summarize_source_targets(
+    correlations: list[dict[str, object]],
+    limit: int = 3,
+    link_base_dir: Path | None = None,
+    linux: Path | None = None,
+) -> str:
     seen = []
     for row in correlations:
-        target = f"{row['subsystem']}:{row['symbol']}@{row['path']}:{row['line']}"
+        source_ref = f"{row['path']}:{row['line']}"
+        if link_base_dir is not None and linux is not None:
+            source_ref = local_file_link(source_ref, linux / str(row["path"]), link_base_dir, int(row["line"]))
+        target = f"{row['subsystem']}:{row['symbol']}@{source_ref}"
         if target not in seen:
             seen.append(target)
     return ", ".join(seen[:limit]) or "none"
@@ -612,7 +634,11 @@ def monitor_strength(inv: dict[str, list[Path]]) -> tuple[int, str]:
     return score, ", ".join(signals) or "none"
 
 
-def run_degradation_summary(run: dict[str, Path | str], linux: Path | None = None) -> dict[str, object]:
+def run_degradation_summary(
+    run: dict[str, Path | str],
+    linux: Path | None = None,
+    link_base_dir: Path | None = None,
+) -> dict[str, object]:
     base = str(run["base"])
     system, benchmark, timestamp = run_parts(base)
     _fields, rows = read_csv_rows(run["csv"])
@@ -714,7 +740,7 @@ def run_degradation_summary(run: dict[str, Path | str], linux: Path | None = Non
         "latency_ratio": latency_ratio,
         "monitor_score": mon_score,
         "monitor_text": mon_text,
-        "source_targets": summarize_source_targets(source_targets),
+        "source_targets": summarize_source_targets(source_targets, link_base_dir=link_base_dir, linux=linux),
         "source_target_count": len(source_targets),
         "potential": potential,
         "patch_confidence": patch_conf,
@@ -727,7 +753,7 @@ def write_summary_report(args: argparse.Namespace) -> str:
     results_dir = Path(args.results_dir)
     linux = Path(args.linux)
     complete, incomplete = collect_runs(results_dir)
-    summaries = [run_degradation_summary(run, linux) for run in complete]
+    summaries = [run_degradation_summary(run, linux, link_base_dir=results_dir) for run in complete]
     summaries.sort(key=lambda r: (float(r["score"]), float(r["degradation"])), reverse=True)
 
     lines = [
@@ -749,16 +775,18 @@ def write_summary_report(args: argparse.Namespace) -> str:
     lines += [
         "## Ranked Patch-Investigation Candidates",
         "",
-        "| rank | run | benchmark | execution | count range | degradation from peak | success drop | latency ratio | monitor evidence | source targets | scaling potential | patch confidence |",
-        "|---:|---|---|---|---|---:|---:|---:|---|---|---|---|",
+        "| rank | run | report | result html | benchmark | execution | count range | degradation from peak | success drop | latency ratio | monitor evidence | source targets | scaling potential | patch confidence |",
+        "|---:|---|---|---|---|---|---|---:|---:|---:|---|---|---|---|",
     ]
     for idx, rec in enumerate(summaries, start=1):
         count_range = f"{rec['baseline_count']} -> {rec['worst_count']}"
         lat = rec["latency_ratio"]
         lines.append(
-            "| {rank} | `{run}` | `{benchmark}` | {execution} | {count_range} | {deg} | {succ} | {lat} | {mon} | {source} | {potential} | {conf} |".format(
+            "| {rank} | `{run}` | {report} | {result_html} | `{benchmark}` | {execution} | {count_range} | {deg} | {succ} | {lat} | {mon} | {source} | {potential} | {conf} |".format(
                 rank=idx,
                 run=rec["base"],
+                report=local_file_link("analysis html", results_dir / f"{rec['base']}_csb-analysis.html", results_dir),
+                result_html=local_file_link("result html", results_dir / f"{rec['base']}.html", results_dir),
                 benchmark=rec["benchmark"],
                 execution=rec["execution_type"],
                 count_range=count_range,
@@ -779,21 +807,25 @@ def write_summary_report(args: argparse.Namespace) -> str:
         "- **Degradation from peak** compares the highest observed throughput in a run/execution type with the largest-count result for that same execution type.",
         "- **Scaling potential** estimates how much room exists to improve many-core scaling if the bottleneck is in a kernel path.",
         "- **Patch confidence** combines the benchmark inflection with available monitor evidence. It should be downgraded during detailed analysis if perf/lock/bpftrace evidence does not map to a plausible kernel path.",
-        "- **Source targets** are top flamegraph symbols resolved against `deps/linux`; they are upstream references unless the measured kernel source is an exact match.",
+        "- **Source targets** are top flamegraph symbols resolved against `deps/linux`; links point to local source files and are upstream references unless the measured kernel source is an exact match.",
+        "- **Report** links open the generated detailed HTML report; **result html** links open the original CSB plot/report HTML for that run.",
         "- Keep native and container results separate until explicitly comparing overheads.",
         "",
         "## Per-Run Notes",
         "",
     ]
     for rec in summaries:
+        base_name = str(rec["base"])
         lines += [
-            f"### {rec['base']}",
+            f"### {base_name}",
             "",
             f"- Benchmark: `{rec['benchmark']}`",
             f"- Worst scaling dimension: {rec['execution_type']} count {rec['baseline_count']} -> {rec['worst_count']}",
             f"- Degradation from peak: {fmt(rec['degradation'])}%",
             f"- Potential for kernel scaling improvement: {rec['potential']}",
             f"- Confidence that a proposed kernel-scaling patch would help: {rec['patch_confidence']}",
+            f"- Detailed report: {local_file_link('analysis html', results_dir / f'{base_name}_csb-analysis.html', results_dir)}",
+            f"- Original result HTML: {local_file_link('result html', results_dir / f'{base_name}.html', results_dir)}",
             f"- Hot source targets: {rec['source_targets']}",
             f"- Evidence note: {rec['note']}",
             "",
@@ -837,6 +869,8 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
             f"- System: `{system}`",
             f"- Benchmark: `{benchmark}`",
             f"- Timestamp: `{timestamp}`",
+            f"- Original result HTML: {local_file_link(f'{base}.html', results_dir / f'{base}.html', results_dir)}",
+            f"- Generated analysis HTML: {local_file_link(f'{base}_csb-analysis.html', results_dir / f'{base}_csb-analysis.html', results_dir)}",
             f"- Configured monitors: {monitors}",
             f"- Applications: {apps}",
             f"- CSV rows: {len(rows)}",
@@ -929,11 +963,17 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
             lines.append("|---|---|---|---:|---:|---|")
             for row in hot_sources:
                 source_text = str(row["source"]).replace("|", "\\|")
+                source_link = local_file_link(
+                    f"{row['path']}:{row['line']}",
+                    linux / str(row["path"]),
+                    results_dir,
+                    int(row["line"]),
+                )
                 lines.append(
-                    "| `{symbol}` | {subsystem} | `{path}` | {line} | {samples} | `{text}` |".format(
+                    "| `{symbol}` | {subsystem} | {source} | {line} | {samples} | `{text}` |".format(
                         symbol=row["symbol"],
                         subsystem=row["subsystem"],
-                        path=row["path"],
+                        source=source_link,
                         line=row["line"],
                         samples=row["inclusive"],
                         text=source_text[:160],
@@ -955,7 +995,8 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
             lines.append("| operation | source file | function/path | present |")
             lines.append("|---|---|---|---|")
             for op, rel, func, present in correlations:
-                lines.append(f"| `{op}` | `{rel}` | `{func}` | {'yes' if present else 'no'} |")
+                source = local_file_link(rel, linux / rel, results_dir) if present else f"`{rel}`"
+                lines.append(f"| `{op}` | {source} | `{func}` | {'yes' if present else 'no'} |")
         else:
             lines.append(
                 "No syscall/source mapping was inferred from the benchmark name; use the hot symbols above for manual `rg`/`git grep` correlation."
@@ -965,7 +1006,7 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
         mon_score, mon_text = monitor_strength(inv)
         degradation = run_degradation_summary(run, linux)
         subsystem = subsystem_hint(benchmark, inv)
-        hot_target_text = summarize_source_targets(hot_sources)
+        hot_target_text = summarize_source_targets(hot_sources, link_base_dir=results_dir, linux=linux)
         lines += [
             "### Hypothesis",
             "",
