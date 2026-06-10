@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib.util
 import json
 import math
 import re
@@ -19,11 +20,36 @@ RUN_RE = re.compile(r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})_(?P<usec>
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("results_dir", nargs="?", default="results")
-    parser.add_argument("--out", default="-", help="Markdown output path, or '-' for stdout")
+    parser.add_argument(
+        "--out",
+        default="-",
+        help=(
+            "Markdown output path, '-' for stdout, or a path containing "
+            "{base}, {run_prefix}, {benchmark}, {system}, or {timestamp} placeholders"
+        ),
+    )
     parser.add_argument("--linux", default="deps/linux", help="Linux source directory to reference")
+    parser.add_argument("--no-html", action="store_true", help="Do not write adjacent HTML for Markdown outputs")
     parser.add_argument("--top-locks", type=int, default=8)
     parser.add_argument("--top-monitor-files", type=int, default=80)
     return parser.parse_args()
+
+
+def load_md_renderer():
+    renderer_path = Path(__file__).with_name("md_to_html.py")
+    spec = importlib.util.spec_from_file_location("csb_analysis_md_to_html", renderer_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load Markdown renderer from {renderer_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def write_markdown_and_html(path: Path, text: str, emit_html: bool) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    if emit_html:
+        load_md_renderer().render_file(path)
 
 
 def read_csv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -79,6 +105,23 @@ def run_parts(base: str) -> tuple[str, str, str]:
     return system, benchmark or prefix, timestamp
 
 
+def run_prefix(base: str) -> str:
+    m = RUN_RE.match(base)
+    if not m:
+        return base
+    parts = m.group("prefix").split("_")
+    if parts and parts[0] == "benchmark" and len(parts) > 1:
+        return "_".join(parts[:2])
+    return parts[0] if parts else base
+
+
+def safe_name(value: str) -> str:
+    value = value.strip().replace(" ", "_").replace(".", "_")
+    value = re.sub(r"[^A-Za-z0-9_-]+", "_", value)
+    value = re.sub(r"_+", "_", value).strip("._")
+    return value or "unknown"
+
+
 def discover_runs(results_dir: Path):
     bases = set()
     for p in results_dir.iterdir() if results_dir.exists() else []:
@@ -94,6 +137,18 @@ def discover_runs(results_dir: Path):
             "html": results_dir / f"{base}.html",
             "csv": results_dir / f"{base}.csv",
         }
+
+
+def collect_runs(results_dir: Path) -> tuple[list[dict[str, Path | str]], list[tuple[dict[str, Path | str], list[str]]]]:
+    complete = []
+    incomplete = []
+    for run in discover_runs(results_dir):
+        missing = [k for k in ("dir", "json", "html", "csv") if not run[k].exists()]
+        if missing:
+            incomplete.append((run, missing))
+        else:
+            complete.append(run)
+    return complete, incomplete
 
 
 def summarize_config(path: Path) -> tuple[str, str]:
@@ -198,7 +253,7 @@ def scaling_table(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     return records
 
 
-def write_report(args: argparse.Namespace) -> str:
+def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | None = None) -> str:
     results_dir = Path(args.results_dir)
     linux = Path(args.linux)
     lines = [
@@ -208,11 +263,13 @@ def write_report(args: argparse.Namespace) -> str:
         f"- Linux source: `{linux}` ({'present' if linux.exists() else 'missing'})",
         "",
     ]
-    complete = []
-    incomplete = []
-    for run in discover_runs(results_dir):
-        missing = [k for k in ("dir", "json", "html", "csv") if not run[k].exists()]
-        (incomplete if missing else complete).append((run, missing))
+    if only_run is None:
+        complete, incomplete = collect_runs(results_dir)
+        complete_items = [(run, []) for run in complete]
+    else:
+        complete = [only_run]
+        incomplete = []
+        complete_items = [(only_run, [])]
     lines += [f"- Complete runs: {len(complete)}", f"- Incomplete runs: {len(incomplete)}", ""]
     if incomplete:
         lines.append("## Incomplete Runs")
@@ -220,7 +277,7 @@ def write_report(args: argparse.Namespace) -> str:
         for run, missing in incomplete:
             lines.append(f"- `{run['base']}` missing: {', '.join(missing)}")
         lines.append("")
-    for run, _ in complete:
+    for run, _ in complete_items:
         base = run["base"]
         system, benchmark, timestamp = run_parts(base)
         fields, rows = read_csv_rows(run["csv"])
@@ -311,15 +368,40 @@ def write_report(args: argparse.Namespace) -> str:
     return "\n".join(lines)
 
 
+def resolve_out_path(template: str, run: dict[str, Path | str]) -> Path:
+    base = str(run["base"])
+    system, benchmark, timestamp = run_parts(base)
+    return Path(
+        template.format(
+            base=safe_name(base),
+            run_prefix=safe_name(run_prefix(base)),
+            system=safe_name(system),
+            benchmark=safe_name(benchmark),
+            timestamp=safe_name(timestamp),
+        )
+    )
+
+
 def main() -> None:
     args = parse_args()
-    report = write_report(args)
     if args.out == "-":
+        report = write_report(args)
         print(report)
+    elif "{" in args.out:
+        complete, incomplete = collect_runs(Path(args.results_dir))
+        if incomplete:
+            print(f"Skipping {len(incomplete)} incomplete run(s)")
+        if not complete:
+            raise SystemExit("No complete runs found")
+        for run in complete:
+            report = write_report(args, only_run=run)
+            out = resolve_out_path(args.out, run)
+            write_markdown_and_html(out, report, not args.no_html)
+            print(out)
     else:
+        report = write_report(args)
         out = Path(args.out)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(report)
+        write_markdown_and_html(out, report, not args.no_html)
         print(out)
 
 
