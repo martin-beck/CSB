@@ -5,19 +5,22 @@ description: "Use when analyzing CSB results in a results/ directory, especially
 
 # CSB Analysis
 
-Analyze CSB result runs as separate experiments, then connect benchmark scaling behavior to monitor evidence and Linux kernel code. Use the base `csb` skill for runner/config mechanics; use this skill when the task is post-run performance analysis.
+Analyze CSB result runs as separate experiments, then connect benchmark scaling behavior to monitor evidence and Linux kernel code. Use the base `csb` skill for runner/config mechanics; use this skill when the task is post-run performance analysis. When `results/` contains multiple complete benchmarks/runs, rerun the full analysis workflow for each one independently; do not reuse hypotheses, baselines, monitor conclusions, or source-correlation assumptions from another benchmark unless a later cross-run comparison is explicitly requested.
 
 ## Quick Workflow
 
 1. Start at the CSB repository root and identify complete runs under `results/`.
 2. Treat each basename as one CSB run only when these siblings exist: `<name>/`, `<name>.json`, `<name>.html`, and `<name>.csv`. If one artifact is missing, report the run as incomplete and avoid mixing it into comparisons unless the user explicitly asks.
-3. Generate a first-pass evidence report:
+3. For every complete run, generate a separate first-pass evidence report. Prefix every analysis Markdown filename with the same run-style prefix used by the results basename: `benchmark_<systemname>...`. Prefer `{base}` so the Markdown filename starts with the exact complete run basename and cannot collide with another run:
 
 ```bash
-python3 /home/pete/.codex/skills/csb-analysis/scripts/csb_result_report.py results --out results/csb-analysis.md
+python3 /etc/codex/skills/csb-analysis/scripts/csb_result_report.py results --out 'results/{base}_csb-analysis.md'
 ```
 
-4. Read the generated report, then inspect the highest-degradation runs and their monitor files directly.
+The report helper writes one Markdown file per complete run when the `--out` path contains placeholders.
+It also writes an adjacent `.html` file for each Markdown report by default.
+
+4. For each generated run-prefixed report, inspect that run's highest-degradation parameter points and monitor files directly before moving to the next benchmark. Reset the analysis state between runs: recompute baselines, inflection points, monitor summaries, source-correlation candidates, and hypotheses from that run's CSV and monitor artifacts only.
 5. Ensure Linux source exists in `deps/linux`; if absent, clone it before making source-code claims:
 
 ```bash
@@ -27,13 +30,20 @@ git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/lin
 If the running kernel is distro-patched, prefer matching sources when available; otherwise state that `deps/linux` is upstream reference code and source-line correlation may be approximate.
 
 6. Correlate hot symbols/callers to source with `rg`, `git grep`, and architecture-specific paths. Prefer exact symbol definitions before making patch proposals.
-7. Produce one detailed document per requested scope. For "all results", organize by run and keep cross-run conclusions explicitly separate from per-run findings.
+7. Produce one detailed document per complete run unless the user explicitly asks for a cross-run synthesis. Both Markdown result files for a run must start with the same `benchmark_<systemname>` prefix taken from the run filename, and should normally start with the full run basename. For example: `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_analysis.md` and `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_csb-analysis.md`. For every analysis Markdown file, generate an adjacent HTML file with the same stem:
+
+```bash
+python3 /etc/codex/skills/csb-analysis/scripts/md_to_html.py results/<analysis-file>.md
+```
+
+For "all results", create independent per-run documents first; only then add a separate cross-run synthesis, and keep cross-run conclusions explicitly separate from per-run findings.
 
 ## Evidence Rules
 
 - Use CSV throughput/latency/success columns as the primary scaling signal.
 - Compare by `execution_type`, `container_cnt`, `nb_threads`, `noise`, and `initial_size`; do not collapse dimensions unless they are constant.
 - Compute degradation against the smallest process/container count for the same execution type and benchmark dimensions.
+- Recompute baselines and degradation independently for each complete run; never carry baseline values, missing-monitor assumptions, hot-symbol rankings, or bottleneck hypotheses from one benchmark/run into another.
 - Use monitor data as explanatory evidence, not as a replacement for benchmark output.
 - Call out missing monitors, empty files, failed monitor commands, and partial runs.
 - Keep native process and container results separate unless drawing an explicit overhead comparison.
