@@ -48,6 +48,35 @@ For "all results", create independent per-run documents first; then add or updat
 10. When the user asks to prepare kernel patches, create per-run patch-series artifacts instead of editing the benchmark evidence reports in place. For each run directory, create a descriptive folder such as `patch-series-ext4-fsync-flush-coalescing/` or `patch-series-vfs-namei-negative-lookup-cache/`. Put the generated patch file and its safety/implications documentation in that folder, and update a global index such as `results/kernel_patch_preparation_summary.md`.
 11. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing result HTML or analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)`, not the shallower summary/report path.
 
+## Runner Comparison Reports
+
+Use `bm-runner/analyze.py` when the user wants a compact comparison report across CSB result CSVs, especially kernel-vs-kernel throughput, success-rate, and scaling plots. Treat it as a convenience post-processor, not as a replacement for the per-run evidence workflow above.
+
+The script:
+
+- recursively discovers `.csv` files under the supplied folders;
+- expects default CSB benchmark result CSV columns such as `algo_name`, `throughput_min`, `container_cnt`, `univ_succ_percent`, `kernel`, `execution_type`, `hostname`, and `nb_threads`;
+- groups by benchmark, execution type, hostname, kernel, and thread count;
+- averages throughput and success percent per `container_cnt`;
+- computes `linearity` as throughput relative to the smallest container count in the same group;
+- writes `analysis-results-<timestamp>/` with combined `results.csv`, `results.md`, `results.html`, per-benchmark text tables, PNG plots, and `linearity.md`.
+
+Prefer running it from `bm-runner/` or with the repo virtualenv so local imports resolve:
+
+```bash
+cd bm-runner
+TMPDIR=/tmp/csb-analyze MPLCONFIGDIR=/tmp/csb-mpl ../venv/bin/python analyze.py <csv-folder> [<csv-folder> ...]
+```
+
+Before using it, avoid these known traps:
+
+- Do not point it at a full `results/` tree unless you first filter/copy only top-level benchmark result CSVs. It recursively picks up monitor CSVs such as `lock-contention.csv` and can crash with missing columns like `algo_name`.
+- Ensure `tabulate` is installed, because pandas `to_markdown()` requires it and `requirements.txt` may not list it.
+- If no valid benchmark CSVs remain, expect `pd.concat()` to fail; report this as "no valid CSB benchmark result CSVs" instead of treating it as an analysis result.
+- Do not interpret its `linearity` column as scaling efficiency unless verified. As implemented it is speedup relative to the smallest container count, not `throughput(N) / (throughput(1) * N)`.
+- Keep `noise`, `initial_size`, and other omitted dimensions in mind. The script currently groups by `algo_name`, `execution_type`, `hostname`, `kernel`, and `nb_threads`; if other dimensions vary, prepare separate input folders or analyze manually.
+- Guard against zero baseline throughput before relying on linearity output.
+
 ## Evidence Rules
 
 - Use CSV throughput/latency/success columns as the primary scaling signal.
