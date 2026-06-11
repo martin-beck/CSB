@@ -119,6 +119,37 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf"`:  Runs perf and generates flame-graphs.
 - `"redis_benchmark"`:  parses the output of redis_benchmark.
 - `"sar_net"`:  monitors network traffic.
+- `"vmstat"`:  Samples `/proc/vmstat` at benchmark start and stop. By default it keeps page fault, reclaim, compaction, NUMA, dirty/writeback, and allocation stall counters, emitting columns such as `vmstat_pgfault_delta`, `vmstat_pgmajfault_delta`, and `vmstat_allocstall_delta`. It also writes `vmstat-delta.png`, which is embedded in the final HTML report.
+
+Example:
+```json
+{
+  "benchmark_config": {
+    "duration": 1,
+    "exec_env": ["native"],
+    "monitors": {
+      "vmstat": []
+    }
+  },
+  "plots": [
+    {
+      "x": "container_cnt",
+      "y": "vmstat_pgmajfault_delta",
+      "hue": "execution_type",
+      "title": "Major faults vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [1024]
+    }
+  ]
+}
+```
+
+Runnable example: `config/monitor_vmstat.json`.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.
