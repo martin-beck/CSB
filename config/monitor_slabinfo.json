@@ -1,0 +1,64 @@
+{
+  "plots": [
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "throughput_min",
+      "y_lbl": "Throughput",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "Throughput mean vs. #Containers",
+      "type": "mean"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "slabinfo_active_objs_delta",
+      "y_lbl": "Active slab objects delta",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "Slab object churn vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "benchmark_config": {
+    "noise": [
+      10
+    ],
+    "threads": {
+      "values": [
+        [
+          1
+        ]
+      ]
+    },
+    "duration": 1,
+    "repeat": 1,
+    "exec_env": [
+      "native"
+    ],
+    "monitors": {
+      "slabinfo": []
+    }
+  },
+  "containers": {
+    "container_list": {
+      "values": [
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    }
+  },
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [
+        1024
+      ]
+    }
+  ]
+}

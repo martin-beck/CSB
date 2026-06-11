@@ -119,6 +119,37 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf"`:  Runs perf and generates flame-graphs.
 - `"redis_benchmark"`:  parses the output of redis_benchmark.
 - `"sar_net"`:  monitors network traffic.
+- `"slabinfo"`:  Samples `/proc/slabinfo` at benchmark start and stop. The monitor emits total object deltas such as `slabinfo_active_objs_delta` and `slabinfo_num_objs_delta`, plus selected cache deltas for dentry, inode, socket, skbuff, kmalloc, cgroup, and file-related slabs when present. It also writes `slabinfo-delta.png`, which is embedded in the final HTML report.
+
+Example:
+```json
+{
+  "benchmark_config": {
+    "duration": 1,
+    "exec_env": ["native"],
+    "monitors": {
+      "slabinfo": []
+    }
+  },
+  "plots": [
+    {
+      "x": "container_cnt",
+      "y": "slabinfo_active_objs_delta",
+      "hue": "execution_type",
+      "title": "Slab object churn vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [1024]
+    }
+  ]
+}
+```
+
+Runnable example: `config/monitor_slabinfo.json`.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.
