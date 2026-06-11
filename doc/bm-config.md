@@ -119,6 +119,37 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf"`:  Runs perf and generates flame-graphs.
 - `"redis_benchmark"`:  parses the output of redis_benchmark.
 - `"sar_net"`:  monitors network traffic.
+- `"schedstat"`:  Samples `/proc/schedstat` at benchmark start and stop. The monitor emits aggregate deltas including `schedstat_cpu_time_ns_delta`, `schedstat_run_delay_ns_delta`, and `schedstat_timeslices_delta`, plus `schedstat_cpu_count`. It also writes `schedstat-delta.png`, which is embedded in the final HTML report.
+
+Example:
+```json
+{
+  "benchmark_config": {
+    "duration": 1,
+    "exec_env": ["native"],
+    "monitors": {
+      "schedstat": []
+    }
+  },
+  "plots": [
+    {
+      "x": "container_cnt",
+      "y": "schedstat_run_delay_ns_delta",
+      "hue": "execution_type",
+      "title": "Scheduler run delay vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [1024]
+    }
+  ]
+}
+```
+
+Runnable example: `config/monitor_schedstat.json`.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.
