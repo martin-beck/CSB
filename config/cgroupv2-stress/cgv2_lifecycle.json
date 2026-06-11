@@ -1,0 +1,69 @@
+{
+  "plots": [
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "throughput",
+      "y_lbl": "Cgroup create/delete ops/s",
+      "hue": "execution_unit",
+      "hue_lbl": "Execution unit",
+      "shape": "lineplot",
+      "title": "cgroup v2 lifecycle throughput vs. #Containers"
+    }
+  ],
+  "benchmark_config": {
+    "duration": 10,
+    "repeat": 1,
+    "exec_env": [
+      "container"
+    ],
+    "initial_size": [
+      64
+    ],
+    "noise": [
+      0
+    ],
+    "threads": {
+      "values": [
+        [
+          4
+        ]
+      ]
+    },
+    "monitors": {
+      "mpstat": [
+        "-n",
+        "-u",
+        "-I",
+        "SCPU,SUM",
+        "-P",
+        "ALL"
+      ],
+      "perf": [
+        "-a"
+      ]
+    }
+  },
+  "containers": {
+    "container_list": {
+      "values": [
+        [
+          1
+        ],
+        {
+          "min": 8,
+          "step": 8,
+          "max": 128
+        }
+      ]
+    },
+    "core_count": 1
+  },
+  "applications": [
+    {
+      "path": "bm-external/cgroupv2-stress",
+      "name": "cgv2_lifecycle.sh",
+      "args": "-d {duration} -t {threads} -s {initial_size} -n {noise} -i {index}"
+    }
+  ]
+}
