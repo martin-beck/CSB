@@ -119,6 +119,37 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf"`:  Runs perf and generates flame-graphs.
 - `"redis_benchmark"`:  parses the output of redis_benchmark.
 - `"sar_net"`:  monitors network traffic.
+- `"pidstat"`:  Runs `pidstat -h -t -u -w -d -r 1` during the benchmark and averages numeric task accounting columns. The monitor emits columns such as `pidstat_pct_usr_avg`, `pidstat_pct_system_avg`, `pidstat_cswch_per_s_avg`, `pidstat_nvcswch_per_s_avg`, `pidstat_kb_rd_per_s_avg`, and `pidstat_majflt_per_s_avg`. It also writes `pidstat-avg.png`, which is embedded in the final HTML report. This monitor requires the `pidstat` binary from sysstat.
+
+Example:
+```json
+{
+  "benchmark_config": {
+    "duration": 1,
+    "exec_env": ["native"],
+    "monitors": {
+      "pidstat": []
+    }
+  },
+  "plots": [
+    {
+      "x": "container_cnt",
+      "y": "pidstat_cswch_per_s_avg",
+      "hue": "execution_type",
+      "title": "Task context switches vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [1024]
+    }
+  ]
+}
+```
+
+Runnable example: `config/monitor_pidstat.json`.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.
