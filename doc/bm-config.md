@@ -119,6 +119,37 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf"`:  Runs perf and generates flame-graphs.
 - `"redis_benchmark"`:  parses the output of redis_benchmark.
 - `"sar_net"`:  monitors network traffic.
+- `"numa"`:  Samples `/sys/devices/system/node/node*/numastat` at benchmark start and stop. The monitor emits aggregate deltas such as `numa_numa_hit_delta`, `numa_numa_miss_delta`, and `numa_other_node_delta`, plus per-node deltas like `numa_node0_numa_miss_delta`. It also writes `numa-delta.png`, which is embedded in the final HTML report.
+
+Example:
+```json
+{
+  "benchmark_config": {
+    "duration": 1,
+    "exec_env": ["native"],
+    "monitors": {
+      "numa": []
+    }
+  },
+  "plots": [
+    {
+      "x": "container_cnt",
+      "y": "numa_numa_miss_delta",
+      "hue": "execution_type",
+      "title": "NUMA misses vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [1024]
+    }
+  ]
+}
+```
+
+Runnable example: `config/monitor_numa.json`.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.
