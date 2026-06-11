@@ -31,12 +31,14 @@ class MonitorType(str, Enum):
     PERF: Runs perf and generates flame-graphs.
     REDIS_BENCHMARK: parses the output of redis_benchmark.
     SAR_NET: monitors network traffic.
+    PSI: samples pressure stall information from /proc/pressure.
     """
 
     MPSTAT = "mpstat"
     PERF = "perf"
     REDIS_BENCHMARK = "redis_benchmark"
     SAR_NET = "sar_net"
+    PSI = "psi"
 
 
 class BenchmarkConfig(dict):

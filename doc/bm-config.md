@@ -119,6 +119,37 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf"`:  Runs perf and generates flame-graphs.
 - `"redis_benchmark"`:  parses the output of redis_benchmark.
 - `"sar_net"`:  monitors network traffic.
+- `"psi"`:  Samples `/proc/pressure/{cpu,memory,io}` at benchmark start and stop. The monitor emits `psi_<resource>_<some|full>_total_delta` counters in microseconds and the final `avg10`, `avg60`, and `avg300` values. It also writes `psi-total-delta.png`, which is embedded in the final HTML report.
+
+Example:
+```json
+{
+  "benchmark_config": {
+    "duration": 1,
+    "exec_env": ["native"],
+    "monitors": {
+      "psi": []
+    }
+  },
+  "plots": [
+    {
+      "x": "container_cnt",
+      "y": "psi_cpu_some_total_delta",
+      "hue": "execution_type",
+      "title": "CPU PSI pressure vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [1024]
+    }
+  ]
+}
+```
+
+Runnable example: `config/monitor_psi.json`.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.
