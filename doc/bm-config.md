@@ -119,6 +119,37 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf"`:  Runs perf and generates flame-graphs.
 - `"redis_benchmark"`:  parses the output of redis_benchmark.
 - `"sar_net"`:  monitors network traffic.
+- `"irq_softirq"`:  Samples `/proc/interrupts`, `/proc/softirqs`, and selected `/proc/stat` counters at benchmark start and stop. The monitor emits delta columns such as `irq_total_delta`, `softirq_net_rx_delta`, `softirq_rcu_delta`, and `proc_stat_intr_delta`. It also writes `irq-softirq-delta.png`, which is embedded in the final HTML report.
+
+Example:
+```json
+{
+  "benchmark_config": {
+    "duration": 1,
+    "exec_env": ["native"],
+    "monitors": {
+      "irq_softirq": []
+    }
+  },
+  "plots": [
+    {
+      "x": "container_cnt",
+      "y": "softirq_total_delta",
+      "hue": "execution_type",
+      "title": "Softirq activity vs. #Containers",
+      "type": "mean"
+    }
+  ],
+  "applications": [
+    {
+      "name": "bm_empty",
+      "operations": [1024]
+    }
+  ]
+}
+```
+
+Runnable example: `config/monitor_irq_softirq.json`.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.

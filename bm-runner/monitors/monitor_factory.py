@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 from config.benchmark import MonitorType
+from monitors.irq_softirq import IrqSoftirqStats
 from monitors.mpstat import SystemStats
 from monitors.redis_bench import RedisStats
 from monitors.perf import FlameGraph
@@ -49,6 +50,8 @@ class MonitorFactory:
                 return RedisStats(output_dir=results_dir, args=args)
             case MonitorType.SAR_NET:
                 return SarNetStats(output_dir=results_dir, args=args)
+            case MonitorType.IRQ_SOFTIRQ:
+                return IrqSoftirqStats(output_dir=results_dir, args=args)
             case _:
                 bm_log(f"Unsupported monitor type {monitor_type}", LogType.FATAL)
                 sys.exit(1)
