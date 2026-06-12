@@ -192,6 +192,7 @@ class Container(ExecutionUnit):
                 cpuset_cpus=self.core_set,
                 volumes=volumes,
                 privileged=True,  # privileged mode
+                cgroupns="host",
                 detach=True,  # detached mode
                 working_dir="/home",
                 ports=ports,

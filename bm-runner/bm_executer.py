@@ -167,8 +167,7 @@ class Executer:
 
     def collect_results(self) -> str:
         stat_prefix = "".join([monitor.collect_results().strip() for monitor in self.monitors])
-        result = "".join(f"{stat_prefix}{eu.get_output()}" for eu in self.exec_units)
-        return result
+        return "\n".join(f"{stat_prefix}{eu.get_output().strip()}" for eu in self.exec_units)
 
     def signal_start(self):
         bm_log(f"Waiting for {self.SLEEP_IN_SEC}, before giving the start signal")
