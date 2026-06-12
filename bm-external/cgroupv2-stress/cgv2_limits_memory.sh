@@ -15,10 +15,7 @@ ROOT="$(create_bench_root)"
 STATE_DIR="$(create_state_dir)"
 trap 'jobs -pr | xargs -r kill 2>/dev/null || true; cleanup_cgroups "${ROOT}"; cleanup_state "${STATE_DIR}"' EXIT
 
-if ! [ -f "${ROOT}/memory.high" ]; then
-    echo "memory controller is not available in ${ROOT}" >&2
-    exit 1
-fi
+enable_cgroup_controller "${ROOT}" "memory"
 
 START_NS="$(date +%s%N)"
 DEADLINE="$(deadline_ns)"
@@ -33,6 +30,7 @@ alloc_worker() {
     local id="$1"
     local cg="${ROOT}/mem-${id}"
     mkdir "${cg}"
+    require_controller_file "${cg}" "memory" "memory.high"
     printf '%s\n' "${BASHPID}" > "${cg}/cgroup.procs" 2>/dev/null || true
     printf '%s\n' "${LIMIT_BYTES}" > "${cg}/memory.high" 2>/dev/null || true
     printf '%s\n' "$((LIMIT_BYTES * 4))" > "${cg}/memory.max" 2>/dev/null || true
@@ -62,8 +60,11 @@ PY
 }
 
 for id in $(seq 1 "${THREADS}"); do
-    alloc_worker "${id}" > "${STATE_DIR}/worker-${id}.out" &
-    WORKERS+=("$!")
+    if alloc_worker "${id}" > "${STATE_DIR}/worker-${id}.out" & then
+        WORKERS+=("$!")
+    else
+        FAILURES=$((FAILURES + 1))
+    fi
 done
 
 for pid in "${WORKERS[@]}"; do

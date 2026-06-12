@@ -7,7 +7,7 @@
       "y_lbl": "Stat reads per second",
       "hue": "execution_unit",
       "hue_lbl": "Execution unit",
-      "shape": "lineplot",
+      "shape": "barplot",
       "title": "cgroup v2 rstat pressure vs. #Containers"
     }
   ],

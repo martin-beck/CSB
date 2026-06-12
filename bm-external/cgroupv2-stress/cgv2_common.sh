@@ -81,7 +81,59 @@ create_bench_root() {
         fi
     fi
 
+    if ! grep -q '[^[:space:]]' "${root}/cgroup.controllers" 2>/dev/null &&
+        [ "${parent}" != "${CGV2_MOUNT}" ] &&
+        grep -q '[^[:space:]]' "${CGV2_MOUNT}/cgroup.controllers" 2>/dev/null; then
+        rmdir "${root}" 2>/dev/null || true
+        root="${CGV2_MOUNT}/csb-${BENCH_NAME}-${$}-${INDEX}"
+        if ! mkdir "${root}" 2>/dev/null; then
+            echo "unable to create benchmark cgroup under ${CGV2_MOUNT}" >&2
+            exit 1
+        fi
+    fi
+
     printf '%s\n' "${root}"
+}
+
+enable_cgroup_controller() {
+    local cg="$1"
+    local controller="$2"
+
+    if ! [ -f "${cg}/cgroup.controllers" ]; then
+        echo "cgroup controllers file not found in ${cg}" >&2
+        return 1
+    fi
+
+    if ! grep -qw "${controller}" "${cg}/cgroup.controllers"; then
+        echo "${controller} controller is not available for children of ${cg}" >&2
+        return 1
+    fi
+
+    if [ -f "${cg}/cgroup.subtree_control" ] && grep -qw "${controller}" "${cg}/cgroup.subtree_control"; then
+        return 0
+    fi
+
+    if ! printf '+%s\n' "${controller}" > "${cg}/cgroup.subtree_control" 2>/dev/null; then
+        echo "unable to enable ${controller} controller for children of ${cg}" >&2
+        return 1
+    fi
+}
+
+require_controller_file() {
+    local cg="$1"
+    local controller="$2"
+    local file="$3"
+    local parent
+
+    if ! [ -f "${cg}/${file}" ]; then
+        parent="$(dirname "${cg}")"
+        enable_cgroup_controller "${parent}" "${controller}" || true
+    fi
+
+    if ! [ -f "${cg}/${file}" ]; then
+        echo "${controller} controller is not available in ${cg}" >&2
+        exit 1
+    fi
 }
 
 cleanup_cgroups() {

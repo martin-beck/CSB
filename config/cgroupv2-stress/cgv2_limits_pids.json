@@ -7,7 +7,7 @@
       "y_lbl": "Task attach/fork attempts per second",
       "hue": "execution_unit",
       "hue_lbl": "Execution unit",
-      "shape": "lineplot",
+      "shape": "barplot",
       "title": "cgroup v2 pids limit throughput vs. #Containers"
     }
   ],

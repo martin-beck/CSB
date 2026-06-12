@@ -7,7 +7,7 @@
       "y_lbl": "Cgroup create/delete ops/s",
       "hue": "execution_unit",
       "hue_lbl": "Execution unit",
-      "shape": "lineplot",
+      "shape": "barplot",
       "title": "cgroup v2 lifecycle throughput vs. #Containers"
     }
   ],

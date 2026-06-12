@@ -14,10 +14,7 @@ require_cgroup2
 ROOT="$(create_bench_root)"
 trap 'jobs -pr | xargs -r kill 2>/dev/null || true; cleanup_cgroups "${ROOT}"' EXIT
 
-if ! [ -f "${ROOT}/pids.max" ]; then
-    echo "pids controller is not available in ${ROOT}" >&2
-    exit 1
-fi
+enable_cgroup_controller "${ROOT}" "pids"
 
 START_NS="$(date +%s%N)"
 DEADLINE="$(deadline_ns)"
@@ -32,14 +29,18 @@ while before_deadline "${DEADLINE}"; do
         continue
     fi
 
+    require_controller_file "${CG}" "pids" "pids.max"
     printf '%s\n' "${LIMIT}" > "${CG}/pids.max" 2>/dev/null || FAILURES=$((FAILURES + 1))
     CHILDREN=()
     for _ in $(seq 1 "$((LIMIT + THREADS))"); do
-        (
+        if (
             printf '%s\n' "${BASHPID}" > "${CG}/cgroup.procs" 2>/dev/null || exit 1
             sleep 0.05
-        ) &
-        CHILDREN+=("$!")
+        ) & then
+            CHILDREN+=("$!")
+        else
+            FAILURES=$((FAILURES + 1))
+        fi
         burn_noise
     done
 
