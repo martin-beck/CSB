@@ -21,7 +21,7 @@ python3 /etc/codex/skills/csb-analysis/scripts/csb_result_report.py results \
 
 The report helper writes one Markdown file per complete run when the `--out` path contains placeholders. It also writes a cross-run summary when `--summary-out` is set, and writes adjacent `.html` files for all Markdown reports by default.
 
-4. For each generated run-prefixed report, inspect that run's highest-degradation parameter points and monitor files directly before moving to the next benchmark. Reset the analysis state between runs: recompute baselines, inflection points, monitor summaries, source-correlation candidates, and hypotheses from that run's CSV and monitor artifacts only.
+4. For each generated run-prefixed report, inspect that run's highest-degradation parameter points and monitor files directly before moving to the next benchmark. Reset the analysis state between runs: recompute baselines, inflection points, monitor summaries, source-correlation candidates, and hypotheses from that run's CSV and monitor artifacts only. When extracting symbols from saved `perf.data` files under `results/`, run offline perf readers with `sudo` so kernel symbols can be resolved, for example `sudo perf report --stdio -i <perf.data> --sort symbol,dso --percent-limit 0.5` and `sudo perf script -i <perf.data>`.
 5. Ensure Linux source exists in `deps/linux`; this tree represents the tested kernel source for benchmark/source correlation. If absent, clone it before making source-code claims:
 
 ```bash
@@ -106,7 +106,7 @@ Read [references/monitor-source-map.md](references/monitor-source-map.md) when c
 
 Prioritize:
 
-- `perf.log`, `perf.err`, `perf.data`: cycles, instructions, context switches, task-clock, stalled cycles, and hot kernel symbols.
+- `perf.log`, `perf.err`, `perf.data`: cycles, instructions, context switches, task-clock, stalled cycles, and hot kernel symbols. Use `sudo perf report/script -i <perf.data>` for saved result captures so kernel symbols are available; if sudo is denied or unavailable, report that kernel symbol extraction is permission-limited.
 - `lock-contention.csv`, `perf-lock.log`: contended lock sites, total wait, average wait, caller, and lock class.
 - `mpstat.json`: system time, iowait, softirq, interrupts, RCU, scheduler activity, and idle collapse.
 - `iostat*.json`, `iostat*.log`, `iostat*.txt`: device utilization, queue depth, await, service time, and throughput.
