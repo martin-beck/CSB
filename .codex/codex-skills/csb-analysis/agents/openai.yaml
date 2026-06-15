@@ -1,6 +1,6 @@
 interface:
   display_name: "CSB Analysis"
   short_description: "Analyze CSB scaling bottlenecks"
-  default_prompt: "Use $csb-analysis to analyze CSB results under results/, correlate scaling bottlenecks with Linux kernel source, and propose patch directions."
+  default_prompt: "Use $csb-analysis to analyze CSB results under results/, correlate scaling bottlenecks with Linux kernel source, compare hot paths against deps/linux-upstream, and propose patch or backport directions."
 policy:
   allow_implicit_invocation: true
