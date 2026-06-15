@@ -32,11 +32,11 @@ Prefer `throughput_min` for conservative scaling. If only benchmark-specific thr
 
 ## Perf
 
-Useful commands when `perf.data` is present and host permissions allow it:
+Useful commands when `perf.data` is present. Use `sudo` for offline reads of CSB result captures so kernel symbols can be resolved; if sudo is denied or unavailable, report that kernel symbol extraction is permission-limited instead of silently relying on user-only symbols:
 
 ```bash
-perf report --stdio -i <perf.data> --sort symbol,dso --percent-limit 0.5
-perf script -i <perf.data> | head
+sudo perf report --stdio -i <perf.data> --sort symbol,dso --percent-limit 0.5
+sudo perf script -i <perf.data> | head
 perf stat -x ';' -I 1000 ...
 ```
 
