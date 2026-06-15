@@ -211,6 +211,11 @@ def main() -> None:
     paths = [Path(p) for p in args.markdown]
     if args.out and len(paths) != 1:
         raise SystemExit("--out is only valid with one input file")
+    html_inputs = [str(path) for path in paths if path.suffix.lower() in {".htm", ".html"}]
+    if html_inputs:
+        raise SystemExit(
+            "refusing to render HTML input as Markdown: " + ", ".join(html_inputs)
+        )
     for path in paths:
         print(render_file(path, Path(args.out) if args.out else None))
 
