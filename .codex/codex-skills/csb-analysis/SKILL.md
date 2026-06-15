@@ -1,6 +1,6 @@
 ---
 name: csb-analysis
-description: "Use when analyzing CSB results in a results/ directory, especially per-run benchmark folders with matching .json/.html/.csv artifacts, monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, or bpftrace, and requests to explain process/container scaling degradation, correlate bottlenecks with Linux kernel source, or propose kernel patch directions for many-core systems."
+description: "Use when analyzing CSB results in a results/ directory, especially per-run benchmark folders with matching .json/.html/.csv artifacts, monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, or bpftrace, and requests to explain process/container scaling degradation, correlate bottlenecks with Linux kernel source, compare hot paths or proposed patches against deps/linux-upstream, or propose/backport kernel patch directions for many-core systems."
 ---
 
 # CSB Analysis
@@ -22,16 +22,26 @@ python3 /etc/codex/skills/csb-analysis/scripts/csb_result_report.py results \
 The report helper writes one Markdown file per complete run when the `--out` path contains placeholders. It also writes a cross-run summary when `--summary-out` is set, and writes adjacent `.html` files for all Markdown reports by default.
 
 4. For each generated run-prefixed report, inspect that run's highest-degradation parameter points and monitor files directly before moving to the next benchmark. Reset the analysis state between runs: recompute baselines, inflection points, monitor summaries, source-correlation candidates, and hypotheses from that run's CSV and monitor artifacts only.
-5. Ensure Linux source exists in `deps/linux`; if absent, clone it before making source-code claims:
+5. Ensure Linux source exists in `deps/linux`; this tree represents the tested kernel source for benchmark/source correlation. If absent, clone it before making source-code claims:
 
 ```bash
 git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git deps/linux
 ```
 
-If the running kernel is distro-patched, prefer matching sources when available; otherwise state that `deps/linux` is upstream reference code and source-line correlation may be approximate.
+If the running kernel is distro-patched, prefer matching sources when available; otherwise state that `deps/linux` is an approximate reference for the tested kernel and source-line correlation may be approximate.
 
-6. Correlate hot symbols/callers to source with `rg`, `git grep`, and architecture-specific paths. Prefer exact symbol definitions before making patch proposals.
-7. Produce one detailed document per complete run unless the user explicitly asks for a cross-run synthesis. Both Markdown result files for a run must start with the same `benchmark_<systemname>` prefix taken from the run filename, and should normally start with the full run basename. For example: `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_analysis.md` and `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_csb-analysis.md`. For every analysis Markdown file, generate an adjacent HTML file with the same stem:
+6. Ensure an upstream comparison tree exists in `deps/linux-upstream` before deciding whether to invent a new kernel change, endorse a proposed patch, or describe an interesting hot path as unimproved upstream. Treat `deps/linux-upstream` as the newer upstream kernel reference and `deps/linux` as the tested kernel reference. If `deps/linux-upstream` is absent, clone it before making upstream-comparison claims:
+
+```bash
+git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git deps/linux-upstream
+```
+
+When both trees exist, record their commit ids with `git -C deps/linux rev-parse --short HEAD` and `git -C deps/linux-upstream rev-parse --short HEAD`. If either tree has local changes, mention that the comparison includes a dirty tree.
+
+7. Correlate hot symbols/callers to source with `rg`, `git grep`, and architecture-specific paths. Prefer exact symbol definitions before making patch proposals.
+8. For every proposed patch direction or discovered hot kernel path, compare the tested path in `deps/linux` against `deps/linux-upstream`. Use targeted `git -C deps/linux-upstream log -- <path>`, `git -C deps/linux-upstream blame`, `git -C deps/linux-upstream show`, `git diff --no-index deps/linux/<path> deps/linux-upstream/<path>`, and symbol searches to identify upstream changes relevant to the hot function, lock, cacheline, syscall, filesystem, network, scheduler, memory-management, or architecture path. Do not treat unrelated churn as an improvement; require a plausible connection to the measured bottleneck.
+9. If upstream appears to improve a hot path or subsume a proposed patch, describe what changed upstream, why it may improve the benchmarked scaling behavior, and whether a backport to the tested kernel would likely help. Include the expected backport shape: commits to inspect/cherry-pick, files/functions touched, minimal pseudo-diff or adaptation plan, dependencies, conflicts, semantic risks, and CSB rerun matrix. If upstream does not contain a relevant improvement, say so and keep the original patch proposal clearly separate.
+10. Produce one detailed document per complete run unless the user explicitly asks for a cross-run synthesis. Both Markdown result files for a run must start with the same `benchmark_<systemname>` prefix taken from the run filename, and should normally start with the full run basename. For example: `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_analysis.md` and `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_csb-analysis.md`. For every analysis Markdown file, generate an adjacent HTML file with the same stem:
 
 ```bash
 python3 /etc/codex/skills/csb-analysis/scripts/md_to_html.py results/<analysis-file>.md
@@ -39,14 +49,15 @@ python3 /etc/codex/skills/csb-analysis/scripts/md_to_html.py results/<analysis-f
 
 For "all results", create independent per-run documents first; then add or update the separate cross-run synthesis, and keep cross-run conclusions explicitly separate from per-run findings.
 
-8. The cross-run summary must collect the essential many-core degradation information from all analyzed runs, estimate the potential for kernel scaling improvement, and rank tests by confidence that a proposed kernel-scaling patch would improve large many-core scaling. Treat the ranking as triage: it should combine benchmark degradation, success/latency movement, monitor evidence strength, and source-correlation plausibility. Do not claim a patch will help from degradation alone.
-9. The cross-run summary and every detailed run report must use local Markdown links for files they reference whenever practical. In particular:
+11. The cross-run summary must collect the essential many-core degradation information from all analyzed runs, estimate the potential for kernel scaling improvement, and rank tests by confidence that a proposed kernel-scaling patch or upstream backport would improve large many-core scaling. Treat the ranking as triage: it should combine benchmark degradation, success/latency movement, monitor evidence strength, source-correlation plausibility, and upstream-comparison strength. Do not claim a patch or backport will help from degradation alone.
+12. The cross-run summary and every detailed run report must use local Markdown links for files they reference whenever practical. In particular:
    - Link each run's original result HTML, e.g. `[result html](benchmark_<...>.html)`.
    - Link each generated detailed analysis HTML from the summary, e.g. `[analysis html](benchmark_<...>_csb-analysis.html)`.
    - Link Linux source files referenced in source-correlation tables or notes, using paths relative to the report location, e.g. `[fs/sync.c:180](../deps/linux/fs/sync.c#L180)`.
+   - Link upstream comparison source files when discussing upstream improvements, e.g. `[fs/sync.c:180](../deps/linux-upstream/fs/sync.c#L180)`.
    - Prefer linked paths over plain backticked paths for navigational targets; keep non-file identifiers such as symbols, benchmark names, and execution types in backticks.
-10. When the user asks to prepare kernel patches, create per-run patch-series artifacts instead of editing the benchmark evidence reports in place. For each run directory, create a descriptive folder such as `patch-series-ext4-fsync-flush-coalescing/` or `patch-series-vfs-namei-negative-lookup-cache/`. Put the generated patch file and its safety/implications documentation in that folder, and update a global index such as `results/kernel_patch_preparation_summary.md`.
-11. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing result HTML or analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)`, not the shallower summary/report path.
+13. When the user asks to prepare kernel patches, create per-run patch-series artifacts instead of editing the benchmark evidence reports in place. For each run directory, create a descriptive folder such as `patch-series-ext4-fsync-flush-coalescing/` or `patch-series-vfs-namei-negative-lookup-cache/`. Put the generated patch file and its safety/implications documentation in that folder, and update a global index such as `results/kernel_patch_preparation_summary.md`.
+14. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing result HTML or analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)` and `[fs/sync.c:180](../../../deps/linux-upstream/fs/sync.c#L180)`, not the shallower summary/report path.
 
 ## Runner Comparison Reports
 
@@ -111,10 +122,11 @@ Write the final analysis as a technical document, not a raw dump:
 - Inflection points: where throughput stops scaling, success drops, latency jumps, idle falls, or kernel time grows.
 - Monitor evidence: summarize top perf symbols, lock callers, mpstat/iostat pressure, SPE/bpftrace observations, and failed/missing monitors.
 - Source correlation: map symbols/callers to `deps/linux` files/functions, explain relevant code paths, and cite the search method.
+- Upstream comparison: map the same hot files/functions to `deps/linux-upstream`, summarize relevant upstream commits or diffs, and state whether upstream already changes the measured bottleneck path.
 - Navigation links: locally link referenced original result HTML, generated analysis HTML, and Linux source files/line anchors so readers can move directly from summaries to detailed evidence and source.
 - Hypothesis: explain the likely bottleneck and confidence level.
-- Patch proposal: state concrete kernel change direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
-- Cross-run summary: table of all analyzed runs ranked by many-core degradation, monitor evidence, potential kernel scaling improvement, and confidence that a proposed patch would improve large many-core scaling; include short per-run notes and caveats.
+- Patch/backport proposal: state concrete kernel change direction or upstream backport direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
+- Cross-run summary: table of all analyzed runs ranked by many-core degradation, monitor evidence, potential kernel scaling improvement, upstream improvement/backport opportunity, and confidence that a proposed patch or backport would improve large many-core scaling; include short per-run notes and caveats.
 
 ## Patch Proposal Discipline
 
@@ -123,6 +135,8 @@ The patch proposal can be a design note or pseudo-diff unless the user asks for 
 - target subsystem and maintainers if known from `scripts/get_maintainer.pl`;
 - code path and lock/data structure involved;
 - why many-core scaling degrades;
+- upstream status from `deps/linux-upstream`: relevant commits/diffs if upstream improved the path, or a brief note that no relevant upstream improvement was found;
+- backport recommendation when upstream is ahead: whether to cherry-pick, adapt a subset, or avoid backporting; expected conflicts/dependencies; and a minimal patch shape for the tested `deps/linux` tree;
 - alternative mitigations considered;
 - validation metrics from CSB that should improve;
 - regressions to watch, especially memory use, fairness, latency tail, ABI behavior, and architecture-specific behavior.
@@ -165,8 +179,10 @@ If the implementation is not production-ready, mark the patch subject and filena
 - links to the detailed Markdown/HTML report and original result HTML when present;
 - link back to the cross-run summary;
 - source-correlation links to `deps/linux` paths with correct relative paths from the patch-series folder;
+- upstream-comparison links to `deps/linux-upstream` paths with correct relative paths from the patch-series folder when upstream contains relevant changes;
 - why this patch was selected and why it is expected to be profitable;
 - what the patch changes at the subsystem/function level;
+- whether the patch is a novel RFC change, a backport/adaptation of upstream work, or a combination;
 - safety level and assumptions;
 - implications for semantics, latency, throughput, memory, fairness, crash consistency, permissions, LSM/fsnotify/accounting, cgroups, and architecture-specific behavior as applicable;
 - validation checklist and benchmark rerun matrix.
