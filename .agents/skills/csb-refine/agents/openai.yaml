@@ -1,0 +1,6 @@
+interface:
+  display_name: "CSB Refine"
+  short_description: "Iteratively refine CSB kernel bottleneck evidence"
+  default_prompt: "Use $csb-refine to run a CSB benchmark, analyze kernel bottleneck hypotheses, adapt temporary configs and monitors, rerun focused perf-backed validation points, and write concise plus detailed refined reports."
+policy:
+  allow_implicit_invocation: true
