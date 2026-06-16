@@ -10,3 +10,6 @@
 [submodule "deps/syzkaller"]
 	path = deps/syzkaller
 	url = https://github.com/open-s4c/syzkaller.git
+[submodule "deps/intel-performance-skills"]
+	path = deps/intel-performance-skills
+	url = https://github.com/intel/intel-performance-skills
