@@ -129,6 +129,16 @@ For post-run performance analysis, use `csb-analysis`.
 
 When the user's goal is kernel performance analysis, scaling diagnosis, or later patch selection, configure the run so `csb-analysis` can apply `linux-perf` and `performance-patterns` evidence cleanly.
 
+Whenever perf data would materially improve the run or later analysis, try to enable full perf visibility before running the benchmark:
+
+```bash
+cat /proc/sys/kernel/perf_event_paranoid
+echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+cat /proc/sys/kernel/perf_event_paranoid
+```
+
+If sudo is denied, unavailable, or policy blocks the change, continue with the best available monitors and record that perf collection was permission-limited. Do not silently downgrade to weaker evidence. After enabling perf, run a useful small benchmark point that can verify the hypothesis, usually baseline count, peak/plateau count, and cliff or largest count with the relevant perf monitor enabled.
+
 Before running, check whether `linux-perf` is available as a skill or local reference under `deps/intel-performance-skills/skills/linux-perf`. If it is missing and network access is permitted or approved, clone the skill bundle:
 
 ```bash
@@ -152,6 +162,13 @@ For scaling sweeps intended for linux-perf Flow D-style analysis, include at lea
 - both native and container execution types when the question includes container overhead.
 
 If host permissions prevent perf, c2c, lock, or bpftrace monitors, do not hide the failure by disabling analysis silently. Record the missing permission in the result notes or final response so `csb-analysis` can distinguish "no evidence" from "no bottleneck."
+
+When a hypothesis already exists, prefer a targeted perf-backed confirmation run over another broad sweep. Examples:
+
+- fsync/writeback hypothesis: run the fsync-heavy benchmark at the baseline and cliff counts with perf plus `iostat`/block evidence.
+- VFS path hypothesis: run the path-heavy benchmark with perf call graphs and source-resolvable kernel symbols.
+- lock/cache-line hypothesis: run the contention point with perf-lock or `perf c2c` if supported.
+- scheduler/wakeup hypothesis: run the cliff point with context-switch and sched/futex trace evidence.
 
 ## Refresh Configs Or Generated Headers
 
