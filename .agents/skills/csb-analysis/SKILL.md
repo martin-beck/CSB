@@ -35,6 +35,16 @@ Use these skills to add, when evidence allows:
 
 Do not force a pattern. If evidence shows I/O wait, scheduler sleep, device flush latency, external serialization, or missing monitor data rather than a CPU-bound pattern, say so and use linux-perf/performance-patterns mainly to rule out CPU-side fixes and to design the next measurement.
 
+When running perf would materially improve or verify a hypothesis, actively try to enable full perf access instead of treating restricted perf as a final state:
+
+```bash
+cat /proc/sys/kernel/perf_event_paranoid
+echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+cat /proc/sys/kernel/perf_event_paranoid
+```
+
+If sudo is approved and the value becomes `-1`, run an actually useful perf-backed benchmark/profile to test the hypothesis, not just a permission check. Keep it focused: baseline count, peak/plateau count, and cliff/largest count for the affected execution type are usually enough. If sudo is denied, unavailable, or policy blocks the change, state that perf evidence is permission-limited and design the next validation command rather than overclaiming from partial data.
+
 ## Quick Workflow
 
 1. Start at the CSB repository root and identify complete runs under `results/`.
@@ -66,7 +76,7 @@ git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/lin
 
 When both trees exist, record their commit ids with `git -C deps/linux rev-parse --short HEAD` and `git -C deps/linux-upstream rev-parse --short HEAD`. If either tree has local changes, mention that the comparison includes a dirty tree.
 
-7. Apply linux-perf/performance-patterns refinement before choosing a patch direction: classify the bottleneck as CPU-bound, lock/cacheline-bound, scheduler/wakeup-bound, I/O-wait/device-bound, memory-management-bound, or unresolved; then record which named performance patterns match or do not match.
+7. Apply linux-perf/performance-patterns refinement before choosing a patch direction: classify the bottleneck as CPU-bound, lock/cacheline-bound, scheduler/wakeup-bound, I/O-wait/device-bound, memory-management-bound, or unresolved; then record which named performance patterns match or do not match. If a fresh perf run would resolve the classification or validate a patch hypothesis, try to set `perf_event_paranoid=-1` with sudo and run the smallest useful CSB/perf profile at the relevant baseline/peak/cliff points.
 8. Correlate hot symbols/callers to source with `rg`, `git grep`, and architecture-specific paths. Prefer exact symbol definitions before making patch proposals. Use performance-patterns detail files to choose the correct source structure to inspect, such as lock variables, counters, wait queues, flush queues, shared structs, or hot loops.
 9. For every proposed patch direction or discovered hot kernel path, compare the tested path in `deps/linux` against `deps/linux-upstream`. Use targeted `git -C deps/linux-upstream log -- <path>`, `git -C deps/linux-upstream blame`, `git -C deps/linux-upstream show`, `git diff --no-index deps/linux/<path> deps/linux-upstream/<path>`, and symbol searches to identify upstream changes relevant to the hot function, lock, cacheline, syscall, filesystem, network, scheduler, memory-management, or architecture path. Do not treat unrelated churn as an improvement; require a plausible connection to the measured bottleneck and to the linux-perf/performance-patterns classification.
 10. If upstream appears to improve a hot path or subsume a proposed patch, describe what changed upstream, why it may improve the benchmarked scaling behavior, and whether a backport to the tested kernel would likely help. Include the expected backport shape: commits to inspect/cherry-pick, files/functions touched, minimal pseudo-diff or adaptation plan, dependencies, conflicts, semantic risks, and CSB rerun matrix. If upstream does not contain a relevant improvement, say so and keep the original patch proposal clearly separate.
@@ -125,6 +135,7 @@ Before using it, avoid these known traps:
 - Recompute baselines and degradation independently for each complete run; never carry baseline values, missing-monitor assumptions, hot-symbol rankings, or bottleneck hypotheses from one benchmark/run into another.
 - Use monitor data as explanatory evidence, not as a replacement for benchmark output.
 - Call out missing monitors, empty files, failed monitor commands, and partial runs.
+- When perf, c2c, lock-stat, or bpftrace would materially change confidence, try to enable the needed host permission first (`perf_event_paranoid=-1` via sudo for perf), then run a useful focused benchmark/profile to verify the hypothesis. If permission is blocked, preserve that as an evidence limitation.
 - Keep native process and container results separate unless drawing an explicit overhead comparison.
 - Avoid claiming a kernel root cause from one signal alone. Require at least a benchmark inflection plus a matching monitor signal plus plausible source-code path.
 - Use linux-perf/performance-patterns as evidence multipliers, not as substitutes for CSB data. A named pattern requires matching profile/source evidence; if the skill mostly rules out a pattern, record that negative evidence.
