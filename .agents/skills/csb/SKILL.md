@@ -1,6 +1,6 @@
 ---
 name: csb
-description: "Use for operating the CSB Container Scalability Benchmarks framework: preparing the runtime environment, choosing or adapting JSON configs for a target application, running bm-runner campaigns, replotting existing results, enabling/disabling monitors/plugins, and refreshing configs for ordinary benchmark runs. Do not use for modifying CSB internals; use csb-dev. Do not use for syzkaller/bm-generator internals; use csb-syzkaller or csb-syzkaller-dev."
+description: "Use for operating the CSB Container Scalability Benchmarks framework: preparing the runtime environment, choosing or adapting JSON configs for a target application, running bm-runner campaigns, configuring linux-perf-friendly monitors, replotting existing results, enabling/disabling monitors/plugins, and refreshing configs for ordinary benchmark runs. Do not use for modifying CSB internals; use csb-dev. Do not use for syzkaller/bm-generator internals; use csb-syzkaller or csb-syzkaller-dev."
 ---
 
 # CSB Usage
@@ -124,6 +124,34 @@ Per-run monitor files usually live below:
 `nb_threads-*/noise-*/initial_size-*/container_cnt-*/execution_type-*/run-*/`
 
 For post-run performance analysis, use `csb-analysis`.
+
+## linux-perf-Friendly Runs
+
+When the user's goal is kernel performance analysis, scaling diagnosis, or later patch selection, configure the run so `csb-analysis` can apply `linux-perf` and `performance-patterns` evidence cleanly.
+
+Before running, check whether `linux-perf` is available as a skill or local reference under `deps/intel-performance-skills/skills/linux-perf`. If it is missing and network access is permitted or approved, clone the skill bundle:
+
+```bash
+git clone https://github.com/intel/intel-performance-skills.git deps/intel-performance-skills
+```
+
+Use the linux-perf setup guidance to decide which monitors are worth enabling. Prefer the smallest monitor set that answers the question:
+
+- CPU/syscall hot path: enable CSB `perf` and `mpstat`.
+- Lock contention: enable lock-contention/perf-lock monitors if available.
+- Cache-line contention or false sharing: collect `perf c2c` evidence when host permissions and hardware support allow it.
+- I/O or fsync/writeback cliffs: enable `mpstat`, `iostat` if available, and a block/flush bpftrace or perf tracepoint monitor if the config supports it.
+- Scheduler/wakeup cliffs: collect context-switch, sched latency, futex/wakeup, or scheduler tracepoint evidence when available.
+
+For scaling sweeps intended for linux-perf Flow D-style analysis, include at least:
+
+- a baseline count;
+- the expected peak or plateau count;
+- the first cliff/regression count;
+- the largest count;
+- both native and container execution types when the question includes container overhead.
+
+If host permissions prevent perf, c2c, lock, or bpftrace monitors, do not hide the failure by disabling analysis silently. Record the missing permission in the result notes or final response so `csb-analysis` can distinguish "no evidence" from "no bottleneck."
 
 ## Refresh Configs Or Generated Headers
 
