@@ -58,6 +58,36 @@ SOURCE_SUBSYSTEM_HINTS = (
     ("arch/arm64/", "arm64 architecture"),
 )
 
+PATTERN_TERMS = {
+    "spin": ("native_queued_spin_lock_slowpath", "queued_spin_lock", "qspinlock", "cmpxchg"),
+    "mutex": ("osq_lock", "__mutex_lock", "mutex_lock", "mutex_spin_on_owner"),
+    "wakeup": ("futex_wake", "try_to_wake_up", "wake_up_q", "ttwu_queue", "sched_yield"),
+    "scheduler": ("__schedule", "schedule", "finish_task_switch", "io_schedule"),
+    "flush": (
+        "vfs_fsync",
+        "vfs_fsync_range",
+        "ext4_sync_file",
+        "blkdev_issue_flush",
+        "submit_bio_wait",
+        "jbd2",
+        "blk_mq",
+        "filemap_fdatawrite",
+    ),
+    "ext4": ("ext4_fallocate", "vfs_fallocate", "ext4_file_write_iter", "ext4_file_read_iter"),
+    "path": (
+        "do_sys_openat2",
+        "path_openat",
+        "link_path_walk",
+        "filename_lookup",
+        "vfs_faccessat",
+        "vfs_statx",
+        "do_faccessat",
+    ),
+    "rw": ("vfs_read", "vfs_write", "new_sync_read", "new_sync_write", "iov_iter", "copy_page"),
+    "net": ("tcp_recvmsg", "tcp_sendmsg", "sock_recvmsg", "sock_sendmsg", "skb", "inet_recvmsg"),
+    "accounting": ("percpu_counter", "__percpu", "this_cpu", "atomic64_add", "atomic_long_add", "refcount"),
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -231,6 +261,7 @@ def monitor_inventory(run_dir: Path) -> dict[str, list[Path]]:
         "perf": ["perf.log", "perf.err", "perf.data", "perf-lock.log", "perf-lock.err"],
         "flamegraph": ["flamegraph.stacks", "flamegraph.errors", "flamegraph.svg"],
         "lock": ["lock-contention.csv", "lock-contention.errors", "perf-lock.log"],
+        "c2c": ["*c2c*"],
         "mpstat": ["mpstat.json", "mpstat.err"],
         "iostat": ["iostat*.json", "iostat*.log", "iostat*.txt", "iostat*.err"],
         "spe": ["*spe*", "*SPE*"],
@@ -502,6 +533,115 @@ def subsystem_hint(benchmark: str, inv: dict[str, list[Path]]) -> str:
     return "unknown kernel/user path"
 
 
+def artifact_present(inv: dict[str, list[Path]], group: str) -> bool:
+    return any(p.stat().st_size > 0 for p in inv.get(group, []))
+
+
+def symbol_term_counts(stack_symbols: list[tuple[str, int, int]]) -> dict[str, int]:
+    counts = {name: 0 for name in PATTERN_TERMS}
+    for symbol, inclusive, _leaf in stack_symbols:
+        for name, terms in PATTERN_TERMS.items():
+            if any(term in symbol for term in terms):
+                counts[name] += int(inclusive)
+    return counts
+
+
+def perf_pattern_classification(
+    benchmark: str,
+    inv: dict[str, list[Path]],
+    stack_symbols: list[tuple[str, int, int]] | None = None,
+) -> dict[str, object]:
+    """Classify a run before patch selection using CSB, linux-perf, and patterns rules."""
+    ops = set(extract_ops(benchmark))
+    stack_symbols = stack_symbols if stack_symbols is not None else top_stack_symbols(inv)
+    counts = symbol_term_counts(stack_symbols)
+    has_c2c = any("c2c" in p.name.lower() and p.stat().st_size > 0 for files in inv.values() for p in files)
+    has_lock = artifact_present(inv, "lock")
+    notes = []
+
+    if ops & {"fsync"}:
+        classification = "sync/flush serialization"
+        pattern_result = "outside performance-patterns CPU/cache-line catalog unless lock/c2c evidence also appears"
+        patch_direction = "fsync/writeback/flush batching, journal/flush policy, or fast-commit backport"
+        confidence = "medium" if counts["flush"] or artifact_present(inv, "iostat") else "low-medium"
+    elif ops & {"fallocate"}:
+        classification = "ext4/VFS metadata path"
+        pattern_result = "no direct CPU-cache pattern; optimize filesystem metadata work per syscall"
+        patch_direction = "ext4 fallocate transaction/path trimming"
+        confidence = "medium" if counts["ext4"] or counts["flush"] else "low-medium"
+    elif ops & {"faccessat2", "newfstatat", "openat", "readlinkat", "getdents64"}:
+        classification = "VFS pathname/dentry/inode path"
+        pattern_result = "no direct pattern match; reduce lookup/refcount/permission overhead"
+        patch_direction = "VFS pathname/access hotpath reduction"
+        confidence = "medium" if counts["path"] else "low-medium"
+    elif ops & {"pread64", "pwrite64", "read", "write", "lseek", "fcntl"}:
+        classification = "VFS file operation/read-write iterator path"
+        pattern_result = "no direct pattern match; reduce generic iterator, copy, fcntl, or file-operation overhead"
+        patch_direction = "sync read/write iterator specialization or file-operation fastpath"
+        confidence = "medium" if counts["rw"] else "low-medium"
+    elif ops & {"recvfrom", "sendto", "setsockopt"}:
+        classification = "socket/TCP syscall path"
+        pattern_result = "no direct pattern match unless wakeup/futex contention is visible"
+        patch_direction = "socket recv/send batching or timestamp/path trimming"
+        confidence = "medium" if counts["net"] else "low-medium"
+    elif counts["wakeup"]:
+        classification = "scheduler/wakeup overhead"
+        pattern_result = "possible CV/futex thundering herd; needs context-switch or futex trace support"
+        patch_direction = "reduce wakeup fan-out, batch work, or use precise wakeups"
+        confidence = "medium"
+    elif counts["mutex"]:
+        classification = "mutex/OSQ contention"
+        pattern_result = "possible mutex-to-rwlock only if source critical section is read-mostly"
+        patch_direction = "lock granularity or reader/writer split after lock-stat/source proof"
+        confidence = "medium" if has_lock else "low"
+    elif counts["spin"]:
+        classification = "spinlock/cache-line contention"
+        pattern_result = "possible TTAS/spinlock contention; needs annotate or lock-stat proof"
+        patch_direction = "reduce contended lock frequency or redesign lock handoff"
+        confidence = "medium" if has_lock or has_c2c else "low"
+    elif counts["accounting"] and has_c2c:
+        classification = "shared accounting/cache-line pressure"
+        pattern_result = "possible per-CPU stats if c2c proves true sharing on a counter"
+        patch_direction = "per-CPU or batched accounting"
+        confidence = "medium"
+    elif counts["flush"]:
+        classification = "sync/flush serialization"
+        pattern_result = "outside performance-patterns CPU/cache-line catalog: flush/journal/block path dominates"
+        patch_direction = "fsync/writeback/flush batching, journal/flush policy, or fast-commit backport"
+        confidence = "medium"
+    else:
+        classification = "unresolved saved-profile bottleneck"
+        pattern_result = "no robust performance-patterns match from saved artifacts"
+        patch_direction = "collect focused perf stat/report/annotate plus c2c or lock-stat if contention is suspected"
+        confidence = "low"
+
+    if counts["flush"] and "flush" not in classification:
+        notes.append("flush/journal/block symbols are present as supporting evidence")
+    if counts["wakeup"] and "wakeup" not in classification:
+        notes.append("wakeup/scheduler symbols are present but are not the primary classifier")
+    if counts["mutex"] and "mutex" not in classification:
+        notes.append("mutex/OSQ symbols are present; promote only with lock-stat and read-mostly source proof")
+    if counts["spin"] and "spinlock" not in classification:
+        notes.append("spin/cmpxchg symbols are present; promote only with annotate or lock-stat proof")
+    if counts["accounting"] and not has_c2c:
+        notes.append("atomic/per-CPU-looking symbols need c2c/annotate proof before a per-CPU-stats proposal")
+    if not has_c2c:
+        notes.append("false sharing and true-sharing fixes are unconfirmed without perf c2c/HITM evidence")
+    if not has_lock:
+        notes.append("lock-pattern matches are candidates only without lock-stat/perf-lock evidence")
+
+    return {
+        "classification": classification,
+        "pattern_result": pattern_result,
+        "patch_direction": patch_direction,
+        "confidence": confidence,
+        "term_counts": counts,
+        "notes": notes,
+        "has_c2c": has_c2c,
+        "has_lock": has_lock,
+    }
+
+
 def inflection_summaries(records: list[dict[str, object]]) -> list[str]:
     by_exec: dict[tuple[object, object, object, object], list[dict[str, object]]] = defaultdict(list)
     for rec in records:
@@ -647,6 +787,7 @@ def run_degradation_summary(
     mon_score, mon_text = monitor_strength(inv)
     linux = linux or Path("deps/linux")
     source_targets = hot_source_correlations(top_stack_symbols(inv, limit=8), linux, limit=5)
+    classifier = perf_pattern_classification(benchmark, inv)
 
     by_exec: dict[str, list[dict[str, object]]] = defaultdict(list)
     for rec in table:
@@ -742,6 +883,10 @@ def run_degradation_summary(
         "monitor_text": mon_text,
         "source_targets": summarize_source_targets(source_targets, link_base_dir=link_base_dir, linux=linux),
         "source_target_count": len(source_targets),
+        "classification": classifier["classification"],
+        "pattern_result": classifier["pattern_result"],
+        "patch_direction": classifier["patch_direction"],
+        "classifier_confidence": classifier["confidence"],
         "potential": potential,
         "patch_confidence": patch_conf,
         "score": score,
@@ -775,14 +920,14 @@ def write_summary_report(args: argparse.Namespace) -> str:
     lines += [
         "## Ranked Patch-Investigation Candidates",
         "",
-        "| rank | run | report | result html | benchmark | execution | count range | degradation from peak | success drop | latency ratio | monitor evidence | source targets | scaling potential | patch confidence |",
-        "|---:|---|---|---|---|---|---|---:|---:|---:|---|---|---|---|",
+        "| rank | run | report | result html | benchmark | execution | count range | degradation from peak | success drop | latency ratio | monitor evidence | linux-perf/pattern class | pattern result | patch direction | source targets | scaling potential | patch confidence |",
+        "|---:|---|---|---|---|---|---|---:|---:|---:|---|---|---|---|---|---|---|",
     ]
     for idx, rec in enumerate(summaries, start=1):
         count_range = f"{rec['baseline_count']} -> {rec['worst_count']}"
         lat = rec["latency_ratio"]
         lines.append(
-            "| {rank} | `{run}` | {report} | {result_html} | `{benchmark}` | {execution} | {count_range} | {deg} | {succ} | {lat} | {mon} | {source} | {potential} | {conf} |".format(
+            "| {rank} | `{run}` | {report} | {result_html} | `{benchmark}` | {execution} | {count_range} | {deg} | {succ} | {lat} | {mon} | {classify} | {pattern} | {direction} | {source} | {potential} | {conf} |".format(
                 rank=idx,
                 run=rec["base"],
                 report=local_file_link("analysis html", results_dir / f"{rec['base']}_csb-analysis.html", results_dir),
@@ -794,6 +939,9 @@ def write_summary_report(args: argparse.Namespace) -> str:
                 succ=fmt(rec["success_drop"]),
                 lat="n/a" if lat is None else f"{lat:.2f}x",
                 mon=rec["monitor_text"],
+                classify=rec["classification"],
+                pattern=rec["pattern_result"],
+                direction=rec["patch_direction"],
                 source=rec["source_targets"],
                 potential=rec["potential"],
                 conf=rec["patch_confidence"],
@@ -807,6 +955,7 @@ def write_summary_report(args: argparse.Namespace) -> str:
         "- **Degradation from peak** compares the highest observed throughput in a run/execution type with the largest-count result for that same execution type.",
         "- **Scaling potential** estimates how much room exists to improve many-core scaling if the bottleneck is in a kernel path.",
         "- **Patch confidence** combines the benchmark inflection with available monitor evidence. It should be downgraded during detailed analysis if perf/lock/bpftrace evidence does not map to a plausible kernel path.",
+        "- **linux-perf/pattern class** is a first-pass classifier that combines benchmark syscall shape, saved perf/flamegraph symbols, and performance-pattern trigger rules. It may rule out CPU/cache-line patterns even for severe degradation.",
         "- **Source targets** are top flamegraph symbols resolved against `deps/linux`; links point to local source files and are upstream references unless the measured kernel source is an exact match.",
         "- **Report** links open the generated detailed HTML report; **result html** links open the original CSB plot/report HTML for that run.",
         "- Keep native and container results separate until explicitly comparing overheads.",
@@ -824,6 +973,8 @@ def write_summary_report(args: argparse.Namespace) -> str:
             f"- Degradation from peak: {fmt(rec['degradation'])}%",
             f"- Potential for kernel scaling improvement: {rec['potential']}",
             f"- Confidence that a proposed kernel-scaling patch would help: {rec['patch_confidence']}",
+            f"- linux-perf/performance-patterns class: {rec['classification']} ({rec['pattern_result']})",
+            f"- First-pass patch direction: {rec['patch_direction']}",
             f"- Detailed report: {local_file_link('analysis html', results_dir / f'{base_name}_csb-analysis.html', results_dir)}",
             f"- Original result HTML: {local_file_link('result html', results_dir / f'{base_name}.html', results_dir)}",
             f"- Hot source targets: {rec['source_targets']}",
@@ -953,6 +1104,31 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
                 lines.append(f"| `{sym}` | {inclusive} | {leaf} |")
             lines.append("")
 
+        classifier = perf_pattern_classification(benchmark, inv, stack_symbols)
+        term_counts = classifier["term_counts"]
+        nonzero_terms = [
+            f"{name}:{value}" for name, value in sorted(term_counts.items()) if value
+        ]
+        lines.append("### linux-perf And Performance-Patterns First-Pass Classification")
+        lines.append("")
+        lines.append(
+            "This first-pass classifier combines the CSB scaling shape, benchmark syscall family, saved perf/flamegraph symbols, and performance-pattern trigger rules before selecting a patch direction."
+        )
+        lines.append("")
+        lines.append(f"- Classification: {classifier['classification']}")
+        lines.append(f"- Performance-patterns result: {classifier['pattern_result']}")
+        lines.append(f"- Patch direction: {classifier['patch_direction']}")
+        lines.append(f"- Classifier confidence: {classifier['confidence']}")
+        lines.append(
+            f"- Specialized evidence present: c2c={'yes' if classifier['has_c2c'] else 'no'}, lock-stat/perf-lock={'yes' if classifier['has_lock'] else 'no'}"
+        )
+        lines.append(f"- Pattern symbol buckets: {', '.join(nonzero_terms) if nonzero_terms else 'none'}")
+        if classifier["notes"]:
+            lines.append("- Classifier caveats:")
+            for note in classifier["notes"]:
+                lines.append(f"  - {note}")
+        lines.append("")
+
         lines.append("### Source Correlation")
         lines.append("")
         hot_sources = hot_source_correlations(stack_symbols, linux, limit=12)
@@ -1011,10 +1187,11 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
             "### Hypothesis",
             "",
             (
-                f"- Likely bottleneck area: {subsystem}. Observed worst degradation from peak is "
+                f"- Likely bottleneck area: {subsystem}; first-pass linux-perf/pattern class is {classifier['classification']}. Observed worst degradation from peak is "
                 f"{fmt(degradation['degradation'])}% for {degradation['execution_type']} at count "
                 f"{degradation['worst_count']}; monitor evidence score is {mon_score} ({mon_text})."
             ),
+            f"- Performance-patterns interpretation: {classifier['pattern_result']}.",
             f"- Hot source targets from flamegraph/source correlation: {hot_target_text}.",
         ]
         if mon_score >= 4 and degradation["degradation"] >= 60:
@@ -1034,10 +1211,10 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
             "### Patch Direction",
             "",
             (
-                f"- Target subsystem: {subsystem}. Start with the hot source targets and mapped files/functions above, "
+                f"- Target subsystem: {subsystem}. First-pass patch direction: {classifier['patch_direction']}. Start with the hot source targets and mapped files/functions above, "
                 "then validate with targeted perf/lock/bpftrace at baseline, peak, and largest-count points."
             ),
-            "- Candidate change shape: reduce shared lock hold time, batch repeated per-process/container work, or move global counters/lists toward per-CPU/per-node state only if the monitor evidence confirms shared-state pressure.",
+            "- Candidate change shape: follow the classifier's subsystem direction first; use TTAS, rwlock, false-sharing, or per-CPU-stats fixes only when the required annotate, lock-stat, or c2c evidence confirms that named pattern.",
             "- Expected CSB improvement: higher aggregate `throughput_min`, smaller drop from peak at high counts, stable `univ_succ_percent`, and no latency regression in `univ_avg`.",
             "- Validation reruns: repeat the smallest count, peak count, largest count, and the largest adjacent-drop pair for the affected execution type; keep native and container runs separate.",
             "- Risks to watch: fairness, memory growth, writeback ordering, socket semantics, cgroup accounting, and architecture-specific behavior on aarch64.",
