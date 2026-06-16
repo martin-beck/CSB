@@ -137,7 +137,24 @@ echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 cat /proc/sys/kernel/perf_event_paranoid
 ```
 
-If sudo is denied, unavailable, or policy blocks the change, continue with the best available monitors and record that perf collection was permission-limited. Do not silently downgrade to weaker evidence. After enabling perf, run a useful small benchmark point that can verify the hypothesis, usually baseline count, peak/plateau count, and cliff or largest count with the relevant perf monitor enabled.
+For perf tracepoints, bpftrace, scheduler/block events, and other trace-based monitors, also check tracefs. Prefer `/sys/kernel/tracing`; fall back to `/sys/kernel/debug/tracing` only when needed:
+
+```bash
+TRACEFS=/sys/kernel/tracing
+test -d "$TRACEFS" || TRACEFS=/sys/kernel/debug/tracing
+findmnt -T "$TRACEFS"
+test -r "$TRACEFS/events" && test -x "$TRACEFS/events"
+sudo mount -o remount,mode=755 "$TRACEFS"
+test -r "$TRACEFS/events" && test -x "$TRACEFS/events"
+```
+
+If tracefs is not mounted, try mounting it before the remount:
+
+```bash
+sudo mount -t tracefs nodev /sys/kernel/tracing
+```
+
+If sudo is denied, unavailable, or policy blocks the change, continue with the best available monitors and record that perf or tracefs collection was permission-limited. Do not silently downgrade to weaker evidence. After enabling perf and tracefs access, run a useful small benchmark point that can verify the hypothesis, usually baseline count, peak/plateau count, and cliff or largest count with the relevant perf monitor enabled.
 
 Before running, check whether `linux-perf` is available as a skill or local reference under `deps/intel-performance-skills/skills/linux-perf`. If it is missing and network access is permitted or approved, clone the skill bundle:
 
@@ -169,6 +186,14 @@ When a hypothesis already exists, prefer a targeted perf-backed confirmation run
 - VFS path hypothesis: run the path-heavy benchmark with perf call graphs and source-resolvable kernel symbols.
 - lock/cache-line hypothesis: run the contention point with perf-lock or `perf c2c` if supported.
 - scheduler/wakeup hypothesis: run the cliff point with context-switch and sched/futex trace evidence.
+
+Before relying on tracepoint events, verify that they are visible to `perf`, for example:
+
+```bash
+perf list 'block:*' 'sched:*' 'syscalls:*' >/tmp/csb-perf-tracepoint-list.txt
+```
+
+If the list is empty or perf reports tracefs permission errors, fix tracefs permissions or document the limitation in the run notes.
 
 ## Refresh Configs Or Generated Headers
 
