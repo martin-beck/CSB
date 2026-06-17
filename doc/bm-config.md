@@ -85,7 +85,10 @@ NicsConfig configures the assignment of Network Interface Cards (NICs) or their 
 # Types
 
 ## Adapter
-Adapters used to transform the output of an external benchmark into the format understood by the framework: a line of `<key>:<val>;` pairs e.g. `throughput:1000;latency:20;`. If an adapter is used the output of the benchmark is piped to the adapter script. See scripts/adapters for examples.  
+Adapters used to transform the output of an external benchmark into the format
+understood by the framework: a line of `<key>=<val>;` pairs e.g.
+`throughput=1000;latency=20;`. If an adapter is used the output of the benchmark
+is piped to the adapter script. See scripts/adapters for examples.
 |Field|Type|Optional|Default|Description|
 |---|---|---|---|---|
 |name|str|:x:||    Adapter script filename. |
@@ -152,7 +155,7 @@ Supported groups for packing.  <br/>Supported values:
 ## Environment Variables
 CSB bm-runner has universal configuration that can overwrite default behavior and JSON config values. These are set via environment variables, and are read at runtime.  <br/>Supported values:
 - `"CSB_NO_CLEAN_BENCH"`:  When set to `true`, it disables the cleaning of the build folder of builtin benchmarks.
-- `"CSB_ANALYZE"`:  When set to `false`, it disables the analysis monitors.
+- `"CSB_ANALYZE"`:  When set to `false`, it disables the analysis monitors by replacing real monitor instances with `DummyMonitor`.
 - `"CSB_NO_BUILD_BENCH"`:  when set to `true`, it skips building *all* builtin benchmarks.
 - `"CSB_PIN_MONITORS"`:  When set to `true`, all monitors will be pinned to a specific CPU.
 - `"CSB_RESULTS_GROUP"`:  when set to <dir-name>, bm-runner dumps all results under results/<dir-name>.
