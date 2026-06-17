@@ -1,6 +1,0 @@
-interface:
-  display_name: "CSB Dev"
-  short_description: "Develop and debug CSB framework internals"
-  default_prompt: "Use $csb-dev to modify bm-runner, monitors, plots, plugins, adapters, execution behavior, tests, or framework documentation."
-policy:
-  allow_implicit_invocation: true
