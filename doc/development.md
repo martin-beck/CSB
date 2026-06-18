@@ -72,6 +72,12 @@ scripts/run-single.sh config/bm_empty.json
 Replot existing results:
 
 ```bash
+helpers/replot-all.py
+```
+
+alternatively
+
+```bash
 cd bm-runner
 ../venv/bin/python main.py --replot --title '<title>' --config ../config/<file>.json ../results/<run-dir>
 ```
@@ -82,8 +88,9 @@ report the missing requirement rather than changing code to hide the failure.
 
 ## Common Change Patterns
 
-- New runner config field: update the matching class under `bm-runner/config/`,
-  parsing/defaults, `doc/bm-config.md`, and tests under `bm-runner/tests/`.
+- New runner config field: update the matching class and Docstrings under
+  `bm-runner/config/`, parsing/defaults, and tests under `bm-runner/tests/`.
+- Run the following script to update doc/bm-config.md `helpers/update-doc.sh` 
 - New monitor: implement the monitor under `bm-runner/monitors/`, wire the
   monitor type and factory, document the config in `doc/bm-config.md`, and test
   empty/failing output handling.
@@ -106,6 +113,7 @@ report the missing requirement rather than changing code to hide the failure.
 - `prog2c`/`csource` changes: inspect generated headers for sanitized paths,
   sockets, buffers, file descriptor cleanup/leak handling, metadata, and trace
   output.
+- Always inline document new code.
 
 ## Style
 
@@ -118,3 +126,9 @@ debug.
 
 Preserve license headers when editing existing source files. Add the same
 MIT/Huawei header to new project source files when consistent with nearby files.
+
+License to new files will be added with:
+
+```bash
+helpers/license-check.sh
+```

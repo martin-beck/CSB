@@ -58,3 +58,5 @@ cleanup unless explicitly requested.
 - If Docker, perf, sysstat, cgroups, NIC setup, network access, or host
   permissions are unavailable, report the exact requirement instead of changing
   code to hide the failure.
+- Try to avoid code duplication by reusing existing code, even if it implies a
+  small refactor.
