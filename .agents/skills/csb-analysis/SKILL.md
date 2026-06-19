@@ -71,6 +71,8 @@ python3 /etc/codex/skills/csb-analysis/scripts/csb_result_report.py results \
 
 The report helper writes one Markdown file per complete run when the `--out` path contains placeholders. It also writes a cross-run summary when `--summary-out` is set, and writes adjacent `.html` files for all Markdown reports by default.
 
+The report helper uses the host `cmark` command to render Markdown to HTML. If `cmark` is not installed, install the distribution package named `cmark`, or rerun the helper with `--no-html` and render the Markdown later.
+
 4. For each generated run-prefixed report, inspect that run's highest-degradation parameter points and monitor files directly before moving to the next benchmark. Reset the analysis state between runs: recompute baselines, inflection points, monitor summaries, source-correlation candidates, linux-perf/performance-patterns classification, and hypotheses from that run's CSV and monitor artifacts only. When extracting symbols from saved `perf.data` files under `results/`, run offline perf readers with `sudo` so kernel symbols can be resolved, for example `sudo perf report --stdio -i <perf.data> --sort symbol,dso --percent-limit 0.5` and `sudo perf script -i <perf.data>`.
 5. Ensure Linux source exists in `deps/linux`; this tree represents the tested kernel source for benchmark/source correlation. If absent, clone it before making source-code claims:
 
@@ -95,8 +97,10 @@ When both trees exist, record their commit ids with `git -C deps/linux rev-parse
 11. Produce one detailed document per complete run unless the user explicitly asks for a cross-run synthesis. Both Markdown result files for a run must start with the same `benchmark_<systemname>` prefix taken from the run filename, and should normally start with the full run basename. For example: `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_analysis.md` and `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_csb-analysis.md`. For every analysis Markdown file, generate an adjacent HTML file with the same stem:
 
 ```bash
-python3 /etc/codex/skills/csb-analysis/scripts/md_to_html.py results/<analysis-file>.md
+cmark --unsafe results/<analysis-file>.md > results/<analysis-file>.html
 ```
+
+If `cmark` is not available, tell the user to install the host package named `cmark` before generating HTML, or generate Markdown only with `--no-html`.
 
 For "all results", create independent per-run documents first; then add or update the separate cross-run synthesis, and keep cross-run conclusions explicitly separate from per-run findings.
 

@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import argparse
 import csv
-import importlib.util
+import html
 import json
 import math
 import os
 import re
+import shutil
 import subprocess
 from collections import defaultdict
 from pathlib import Path
@@ -19,25 +20,6 @@ from statistics import mean
 RUN_RE = re.compile(r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})_(?P<usec>\d{6})$")
 COMPILER_SUFFIX_RE = re.compile(r"(\.constprop\.\d+|\.isra\.\d+|\.part\.\d+)$")
 SOURCE_LOOKUP_CACHE: dict[tuple[str, str], list[tuple[str, int, str]]] = {}
-
-SYSCALL_SOURCE_MAP = {
-    "faccessat2": [("fs/open.c", "do_faccessat"), ("fs/namei.c", "user_path_at_empty")],
-    "fallocate": [("fs/open.c", "ksys_fallocate"), ("fs/ioctl.c", "ioctl_preallocate")],
-    "fcntl": [("fs/fcntl.c", "do_fcntl"), ("fs/locks.c", "fcntl_setlk")],
-    "fsync": [("fs/sync.c", "ksys_fsync"), ("fs/fs-writeback.c", "wb_workfn")],
-    "getdents64": [("fs/readdir.c", "iterate_dir"), ("fs/readdir.c", "filldir64")],
-    "lseek": [("fs/read_write.c", "ksys_lseek"), ("fs/read_write.c", "vfs_llseek")],
-    "newfstatat": [("fs/stat.c", "do_statx"), ("fs/stat.c", "vfs_statx")],
-    "openat": [("fs/open.c", "do_sys_openat2"), ("fs/namei.c", "path_openat")],
-    "pread64": [("fs/read_write.c", "ksys_pread64"), ("mm/filemap.c", "filemap_read")],
-    "pwrite64": [("fs/read_write.c", "ksys_pwrite64"), ("mm/filemap.c", "generic_perform_write")],
-    "read": [("fs/read_write.c", "ksys_read"), ("mm/filemap.c", "filemap_read")],
-    "readlinkat": [("fs/stat.c", "do_readlinkat"), ("fs/namei.c", "vfs_readlink")],
-    "recvfrom": [("net/socket.c", "__sys_recvfrom"), ("net/core/datagram.c", "skb_copy_datagram_iter")],
-    "sendto": [("net/socket.c", "__sys_sendto"), ("net/core/sock.c", "sock_sendmsg")],
-    "setsockopt": [("net/socket.c", "__sys_setsockopt"), ("net/core/sock.c", "sock_setsockopt")],
-    "write": [("fs/read_write.c", "ksys_write"), ("mm/filemap.c", "generic_perform_write")],
-}
 
 SOURCE_DIRS = ("arch", "block", "drivers", "fs", "include", "kernel", "mm", "net")
 SOURCE_SUBSYSTEM_HINTS = (
@@ -114,21 +96,61 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_md_renderer():
-    renderer_path = Path(__file__).with_name("md_to_html.py")
-    spec = importlib.util.spec_from_file_location("csb_analysis_md_to_html", renderer_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load Markdown renderer from {renderer_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def write_markdown_and_html(path: Path, text: str, emit_html: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     if emit_html:
-        load_md_renderer().render_file(path)
+        render_html_with_cmark(path)
+
+
+def render_html_with_cmark(path: Path) -> Path:
+    cmark = shutil.which("cmark")
+    if cmark is None:
+        raise SystemExit(
+            "cmark is required to render CSB Markdown reports to HTML. "
+            "Install the host package named 'cmark' or rerun with --no-html."
+        )
+    proc = subprocess.run(
+        [cmark, "--unsafe", str(path)],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0:
+        raise SystemExit(f"cmark failed for {path}: {proc.stderr.strip()}")
+    title = next((line.lstrip("# ").strip() for line in path.read_text(errors="replace").splitlines() if line.startswith("#")), path.stem)
+    html_path = path.with_suffix(".html")
+    html_path.write_text(html_document(title, proc.stdout))
+    return html_path
+
+
+def html_document(title: str, body: str) -> str:
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)}</title>
+<style>
+:root {{ color-scheme: light dark; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; max-width: 1180px; margin: 32px auto; padding: 0 20px; }}
+h1, h2, h3 {{ line-height: 1.2; }}
+code {{ background: rgba(127, 127, 127, 0.16); padding: 0.12em 0.28em; border-radius: 4px; }}
+pre {{ overflow-x: auto; padding: 14px; background: rgba(127, 127, 127, 0.14); border-radius: 6px; }}
+pre code {{ background: transparent; padding: 0; }}
+table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.94rem; }}
+th, td {{ border: 1px solid rgba(127, 127, 127, 0.35); padding: 6px 8px; text-align: left; vertical-align: top; }}
+th {{ background: rgba(127, 127, 127, 0.14); }}
+a {{ color: #0b66c3; }}
+@media (prefers-color-scheme: dark) {{ a {{ color: #8ab4f8; }} }}
+</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
 
 
 def read_csv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -501,20 +523,68 @@ def extract_ops(benchmark: str) -> list[str]:
     if tokens[:3] == ["bm", "min", "rocks"]:
         tokens = tokens[3:]
     ops = []
-    skip = {"missing"}
+    skip = {"bm", "min", "mysql", "rocks", "missing", "native", "container", "containers"}
     for tok in tokens:
-        if tok.isdigit() or tok in skip:
+        if tok.isdigit() or tok in skip or len(tok) < 3:
             continue
-        if tok in SYSCALL_SOURCE_MAP and tok not in ops:
+        if re.fullmatch(r"\d+", tok):
+            continue
+        if tok not in ops:
             ops.append(tok)
     return ops
 
 
-def source_correlations(benchmark: str, linux: Path) -> list[tuple[str, str, str, bool]]:
+def source_name_candidates(op: str) -> list[str]:
+    candidates = [
+        op,
+        f"ksys_{op}",
+        f"__sys_{op}",
+        f"__do_sys_{op}",
+        f"sys_{op}",
+        f"vfs_{op}",
+        f"do_{op}",
+    ]
+    if op.endswith("at"):
+        candidates.append(f"do_sys_{op}2")
+    if op.endswith("64"):
+        base = op[:-2]
+        candidates.extend(
+            [
+                base,
+                f"ksys_{base}",
+                f"__sys_{base}",
+                f"__do_sys_{base}",
+                f"sys_{base}",
+                f"vfs_{base}",
+            ]
+        )
+    return list(dict.fromkeys(candidates))
+
+
+def source_correlations(benchmark: str, linux: Path, limit_per_op: int = 4) -> list[dict[str, object]]:
     out = []
     for op in extract_ops(benchmark):
-        for rel, func in SYSCALL_SOURCE_MAP.get(op, []):
-            out.append((op, rel, func, (linux / rel).exists()))
+        seen = set()
+        for candidate in source_name_candidates(op):
+            for rel, lineno, text in lookup_symbol_source(candidate, linux, limit=limit_per_op):
+                key = (rel, lineno)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(
+                    {
+                        "operation": op,
+                        "symbol": candidate,
+                        "path": rel,
+                        "line": lineno,
+                        "source": text,
+                        "present": (linux / rel).exists(),
+                    }
+                )
+                if len(seen) >= limit_per_op:
+                    break
+            if len(seen) >= limit_per_op:
+                break
     return out
 
 
@@ -1165,17 +1235,22 @@ def write_report(args: argparse.Namespace, only_run: dict[str, Path | str] | Non
         correlations = source_correlations(benchmark, linux)
         if correlations:
             lines.append(
-                "Benchmark-name syscall/source pivots:"
+                "Benchmark-name source pivots resolved dynamically against `deps/linux`:"
             )
             lines.append("")
-            lines.append("| operation | source file | function/path | present |")
-            lines.append("|---|---|---|---|")
-            for op, rel, func, present in correlations:
-                source = local_file_link(rel, linux / rel, results_dir) if present else f"`{rel}`"
-                lines.append(f"| `{op}` | {source} | `{func}` | {'yes' if present else 'no'} |")
+            lines.append("| benchmark token | matched symbol | source file | line | source text |")
+            lines.append("|---|---|---|---:|---|")
+            for row in correlations:
+                rel = str(row["path"])
+                present = bool(row["present"])
+                source = local_file_link(rel, linux / rel, results_dir, int(row["line"])) if present else f"`{rel}`"
+                source_text = str(row["source"]).replace("|", "\\|")
+                lines.append(
+                    f"| `{row['operation']}` | `{row['symbol']}` | {source} | {row['line']} | `{source_text[:160]}` |"
+                )
         else:
             lines.append(
-                "No syscall/source mapping was inferred from the benchmark name; use the hot symbols above for manual `rg`/`git grep` correlation."
+                "No benchmark-name source pivots were resolved; use the hot symbols above for manual `rg`/`git grep` correlation."
             )
         lines.append("")
 
