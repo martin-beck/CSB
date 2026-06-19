@@ -1,6 +1,6 @@
 interface:
   display_name: "CSB Analysis"
-  short_description: "Analyze CSB scaling and kernel bottlenecks"
-  default_prompt: "Use $csb-analysis to analyze CSB results under results/, apply linux-perf and performance-patterns evidence when available, correlate scaling bottlenecks with Linux kernel source, compare hot paths against deps/linux-upstream, and propose patch or backport directions."
+  short_description: "Correlate CSB throughput drops with monitors, hot kernel functions, and upstream changes"
+  default_prompt: "Use $csb-analysis to analyze CSB results under results/ by finding the execution-unit count where throughput drops, correlating collected monitor stats with that drop, identifying widening perf/flamegraph kernel functions, and checking whether those hot paths changed upstream since Linux v6.6. Do not use skill Python helpers or fixed monitor-to-source mapping files."
 policy:
   allow_implicit_invocation: true
