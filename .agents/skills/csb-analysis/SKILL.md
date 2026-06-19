@@ -114,7 +114,7 @@ results/<base>/<benchmark>-<function>-kernel-changes.md
 10. Write the benchmark analysis report.
     - Produce one report per benchmark/run unless the user asks otherwise.
     - Prefer `results/<base>_csb-analysis.md` for the main report.
-    - If generating HTML is useful and Python-Markdown is available, render with the `tables` extension so pipe tables become HTML tables. Create an adjacent HTML file with the same stem.
+    - Do not create HTML by default. Create an adjacent HTML file with the same stem only when the user requests rendered HTML output or a downstream workflow explicitly needs it.
 
 ## Report Shape
 
@@ -235,7 +235,7 @@ git -C deps/linux-upstream log --oneline v6.6..HEAD -- <path>
 git -C deps/linux-upstream log -L :<function_name>:<path> v6.6..HEAD
 ```
 
-Render Markdown to HTML when useful:
+Optionally render Markdown to HTML when requested:
 
 ```bash
 python3 -m markdown -x tables results/<base>_csb-analysis.md > results/<base>_csb-analysis.html
