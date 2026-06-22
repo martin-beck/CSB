@@ -10,46 +10,52 @@
 #include <stdint.h>
 
 /* We define a few constants to make the linter happy. */
-#define V_NUM_8 8U
+#define V_NUM_8  8U
 #define V_NUM_32 32U
 
-static inline uint32_t v_log2(uint32_t v) {
-  assert(v != 0);
-  return (
-      (V_NUM_8 * sizeof(unsigned long long) - (uint32_t)__builtin_clzll(v)) -
-      1U);
+static inline uint32_t
+v_log2(uint32_t v)
+{
+    assert(v != 0);
+    return (
+        (V_NUM_8 * sizeof(unsigned long long) - (uint32_t)__builtin_clzll(v)) -
+        1U);
 }
 
-static inline uint32_t v_pow2_round_up(uint32_t v) {
-  assert(v != 0);
-  return v == 1U ? 1U : 1U << (V_NUM_32 - (uint32_t)__builtin_clz(v - 1U));
+static inline uint32_t
+v_pow2_round_up(uint32_t v)
+{
+    assert(v != 0);
+    return v == 1U ? 1U : 1U << (V_NUM_32 - (uint32_t)__builtin_clz(v - 1U));
 }
 
-static inline uint32_t v_pow2_round_down(uint32_t v) {
-  assert(v != 0);
-  return 1U << ((V_NUM_32 - (uint32_t)__builtin_clz(v)) - 1U);
+static inline uint32_t
+v_pow2_round_down(uint32_t v)
+{
+    assert(v != 0);
+    return 1U << ((V_NUM_32 - (uint32_t)__builtin_clz(v)) - 1U);
 }
 
 #undef V_NUM_8
 #undef V_NUM_32
 
 #ifndef V_IS_POWER_OF_TWO
-/**
- * Checks if the given number is not zero and is a power of two
- *
- */
-#define V_IS_POWER_OF_TWO(_num_)                                               \
-  (((_num_) != 0) && ((_num_) & ((_num_) - 1)) == 0)
+    /**
+     * Checks if the given number is not zero and is a power of two
+     *
+     */
+    #define V_IS_POWER_OF_TWO(_num_)                                           \
+        (((_num_) != 0) && ((_num_) & ((_num_)-1)) == 0)
 
 #endif
 
 #ifndef V_MOD_POWER_OF_TWO
-/**
- *  Calculates _num_ % _pot_
- * bitwise & is used if _pot_ is a power of two
- */
-#define V_MOD_POWER_OF_TWO(_num_, _pot_)                                       \
-  (V_IS_POWER_OF_TWO(_pot_) ? ((_num_) & ((_pot_) - 1)) : (_num_) % (_pot_))
+    /**
+     *  Calculates _num_ % _pot_
+     * bitwise & is used if _pot_ is a power of two
+     */
+    #define V_MOD_POWER_OF_TWO(_num_, _pot_)                                   \
+        (V_IS_POWER_OF_TWO(_pot_) ? ((_num_) & ((_pot_)-1)) : (_num_) % (_pot_))
 #endif
 
 /**
@@ -57,12 +63,12 @@ static inline uint32_t v_pow2_round_down(uint32_t v) {
  *
  */
 #ifndef VMIN
-#define VMIN(_a_, _b_)                                                         \
-  ({                                                                           \
-    __typeof__(_a_) _a = (_a_);                                                \
-    __typeof__(_b_) _b = (_b_);                                                \
-    _a < _b ? _a : _b;                                                         \
-  })
+    #define VMIN(_a_, _b_)                                                     \
+        ({                                                                     \
+            __typeof__(_a_) _a = (_a_);                                        \
+            __typeof__(_b_) _b = (_b_);                                        \
+            _a < _b ? _a : _b;                                                 \
+        })
 #endif
 
 /**
@@ -70,12 +76,12 @@ static inline uint32_t v_pow2_round_down(uint32_t v) {
  *
  */
 #ifndef VMAX
-#define VMAX(_a_, _b_)                                                         \
-  ({                                                                           \
-    __typeof__(_a_) _a = (_a_);                                                \
-    __typeof__(_b_) _b = (_b_);                                                \
-    _a > _b ? _a : _b;                                                         \
-  })
+    #define VMAX(_a_, _b_)                                                     \
+        ({                                                                     \
+            __typeof__(_a_) _a = (_a_);                                        \
+            __typeof__(_b_) _b = (_b_);                                        \
+            _a > _b ? _a : _b;                                                 \
+        })
 #endif
 
 /**
@@ -86,7 +92,7 @@ static inline uint32_t v_pow2_round_down(uint32_t v) {
  * @param _v_  value to check if in range
  */
 #ifndef VIN_RANGE
-#define VIN_RANGE(_lb_, _v_, _ub_) (((_lb_) <= (_v_)) && ((_v_) <= (_ub_)))
+    #define VIN_RANGE(_lb_, _v_, _ub_) (((_lb_) <= (_v_)) && ((_v_) <= (_ub_)))
 #endif
 
 /**
@@ -96,8 +102,8 @@ static inline uint32_t v_pow2_round_down(uint32_t v) {
  *
  */
 #ifndef VCEIL_DIV
-#define VCEIL_DIV(_x_, _y_)                                                    \
-  ((_x_) % (_y_) == 0 ? ((_x_) / (_y_)) : (((_x_) / (_y_)) + 1))
+    #define VCEIL_DIV(_x_, _y_)                                                \
+        ((_x_) % (_y_) == 0 ? ((_x_) / (_y_)) : (((_x_) / (_y_)) + 1))
 #endif
 
 /**
@@ -105,7 +111,7 @@ static inline uint32_t v_pow2_round_down(uint32_t v) {
  *
  */
 #ifndef VIS_ODD
-#define VIS_ODD(_v_) (((_v_) & 1U) == 1U)
+    #define VIS_ODD(_v_) (((_v_)&1U) == 1U)
 #endif
 
 /**
@@ -113,7 +119,7 @@ static inline uint32_t v_pow2_round_down(uint32_t v) {
  *
  */
 #ifndef VIS_EVEN
-#define VIS_EVEN(_v_) (((_v_) & 1U) == 0U)
+    #define VIS_EVEN(_v_) (((_v_)&1U) == 0U)
 #endif
 
 /**
@@ -123,12 +129,13 @@ static inline uint32_t v_pow2_round_down(uint32_t v) {
  * @param dividend the dividend.
  * @return size_t N.
  */
-static inline size_t v_least_containing_multiple(size_t divisor,
-                                                 size_t dividend) {
-  assert(dividend);
-  size_t result = ((divisor + (dividend - 1U)) / dividend) * dividend;
-  assert(result >= divisor);
-  return result;
+static inline size_t
+v_least_containing_multiple(size_t divisor, size_t dividend)
+{
+    assert(dividend);
+    size_t result = ((divisor + (dividend - 1U)) / dividend) * dividend;
+    assert(result >= divisor);
+    return result;
 }
 
 #endif
