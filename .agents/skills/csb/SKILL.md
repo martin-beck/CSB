@@ -42,14 +42,7 @@ scripts/run-single.sh config/<file>.json [extra main.py args]
 
 `scripts/run-single.sh` prepares the venv and common paths, sets `FLAMEGRAPH`, `SHE_HULK_ADAPTERS`, `CSB_ADAPTERS`, `CSB_PLUGINS`, sets `CSB_NO_BUILD_BENCH=ON`, raises the open-file limit to the hard limit, then invokes `bm-runner/main.py`.
 
-Useful environment toggles:
-
-- `CSB_RESULTS_GROUP=<name>` writes grouped results.
-- `CSB_ANALYZE=false` disables real monitors through dummy monitors.
-- `CSB_NO_BUILD_BENCH=true` skips builtin benchmark builds.
-- `CSB_NO_CLEAN_BENCH=true` keeps previous builtin build artifacts.
-- `CSB_PIN_MONITORS=true` pins monitors to the last CPU.
-- `CSB_ARM_SPE=true` enables Arm SPE perf capture when available.
+Useful environment toggles can be found in `doc/bm-config.md#environment-variables`
 
 Running full benchmarks may require Docker access, `perf`, `sysstat`, sudo-able NIC operations, and host permissions. If these fail, report the exact missing capability.
 
@@ -95,8 +88,7 @@ Normal interactive run:
 Direct runner:
 
 ```bash
-cd bm-runner
-python3 main.py --title '<title>' --config ../config/<file>.json
+scripts/run-single.sh config/<file>.json [extra main.py args]
 ```
 
 Replot without rerunning workloads:
