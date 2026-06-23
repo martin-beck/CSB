@@ -135,7 +135,11 @@ def read_csv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     lines = [line for line in path.read_text(errors="replace").splitlines() if line and not line.startswith("#")]
     if not lines:
         return [], []
-    dialect = csv.Sniffer().sniff("\n".join(lines[:5]), delimiters=";,")
+    try:
+        dialect = csv.Sniffer().sniff("\n".join(lines[:5]), delimiters=";,")
+    except csv.Error:
+        dialect = csv.excel()
+        dialect.delimiter = ";" if lines[0].count(";") >= lines[0].count(",") else ","
     reader = csv.DictReader(lines, dialect=dialect)
     return list(reader.fieldnames or []), list(reader)
 

@@ -180,6 +180,22 @@ python3 main.py --replot --title '<title>' --config ../config/<file>.json ../res
 
 Some commands require Docker, perf, sysstat, cgroups, NIC privileges, or network access. If they fail because host permissions or services are unavailable, report the exact requirement instead of changing code to hide the failure.
 
+## Remote Host: node26
+
+When the user asks to run anything CSB-related on `node26`, treat `node26` as the benchmark host and this checkout as the instruction/control host.
+
+- Access: use `ssh node26`. The CSB checkout on the remote host is `/home/martin/csb`.
+- Skills and agent instructions: read and apply skills from this host checkout, such as `/home/martin/csb/.agents/skills/...`. Do not expect the remote host to contain the active skill state.
+- Benchmarks and results: run benchmark commands on `node26` and read/write benchmark configs, generated bundles, monitor outputs, and `results/` artifacts from `/home/martin/csb` on `node26`, unless the user explicitly asks for a local-only operation.
+- Kernel source trees on `node26`: `/home/martin/linux-current` and `/home/martin/linux-upstream`. Use those remote trees for source lookup and object-build tests tied to node26 runs.
+- BPF/bpftrace templates: local files under `bm-runner/monitors/bpftrace_programs/` in this host checkout are the canonical templates. If a node26 run needs a BPF monitor that is missing or stale remotely, copy or adapt only the needed template to the node26 checkout or a temporary remote config; do not broadly overwrite unrelated remote files.
+- Config edits for experiments: preserve remote user changes. Prefer temporary configs under `config/refine/` on `node26` and unique `CSB_RESULTS_GROUP` values for experiments.
+- Known node26 setup: Ubuntu Jammy on aarch64, kernel `5.15.0-171-generic`, 128 CPUs, cgroup v2, Docker usable by `martin`, `perf_event_paranoid=-1`, `bpftrace` installed, `libhiredis-dev` installed, `sysstat`/`iostat` installed, and `youki` available at `/usr/local/sbin/youki`.
+- Known monitor constraints: `perf_lock`/lock-contention is not useful on the current node26 kernel because lock tracepoints require `CONFIG_LOCKDEP`/`CONFIG_LOCK_STAT`; omit or replace lock plots/monitors for node26 unless a newer kernel proves support. Some PMU events such as `branches` may be unsupported on arm64; keep perf-stat configs tolerant of missing events.
+- Arm SPE: for kernel/performance investigations on node26, check whether Arm SPE is available (`perf list` and trace/perf permissions). If available, consider `CSB_ARM_SPE=true` or the matching CSB monitor path for memory-latency/cache evidence.
+- Cgroups/youki benchmark setup: before running `config/bm-cgroups-youki.json` or derivatives on node26, ensure `scripts/bm-external/cgroups/prepare.sh` has created `bm-external/cgroups/rootfs` and `config.json`. The helper emits CSB-style `key=value;` output after preparation.
+- Remote tool availability can differ from this host. For monitor selection, first check node26 capabilities (`command -v`, `perf list`, tracefs access, `bpftrace --version`, `iostat`) and then choose the closest working monitor set instead of blindly copying local assumptions.
+
 ## Common Change Patterns
 
 - New runner config field: update `bm-runner/config/`, config parsing/defaults, `doc/bm-config.md`, and tests.

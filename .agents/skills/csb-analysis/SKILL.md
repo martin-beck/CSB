@@ -1,6 +1,6 @@
 ---
 name: csb-analysis
-description: "Use when analyzing CSB results in a results/ directory, especially per-run benchmark folders with matching .json/.html/.csv artifacts, monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, bpftrace, linux-perf workflows, performance-patterns classification, or requests to explain process/container scaling degradation, correlate bottlenecks with Linux kernel source, compare hot paths or proposed patches against deps/linux-upstream, or propose/backport kernel patch directions for many-core systems."
+description: "Use when analyzing CSB results in a results/ directory, especially per-run benchmark folders with matching .json/.html/.csv artifacts, monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, bpftrace, linux-perf workflows, performance-patterns classification, or requests to explain process/container scaling degradation, correlate bottlenecks with Linux kernel source, compare distribution-kernel hot paths against Torvalds main using one deps/linux clone, or propose/backport kernel patch directions for many-core systems."
 ---
 
 # CSB Analysis
@@ -60,7 +60,7 @@ If tracefs is not mounted, try `sudo mount -t tracefs nodev /sys/kernel/tracing`
 ## Quick Workflow
 
 1. Start at the CSB repository root and identify complete runs under `results/`.
-2. Treat each basename as one CSB run only when these siblings exist: `<name>/`, `<name>.json`, `<name>.html`, and `<name>.csv`. If one artifact is missing, report the run as incomplete and avoid mixing it into comparisons unless the user explicitly asks.
+2. Treat each basename as one CSB run only when all of these siblings exist: `<name>/`, `<name>.json`, `<name>.html`, and `<name>.csv`. If one artifact is missing, report the run as incomplete and avoid mixing it into comparisons unless the user explicitly asks.
 3. For every complete run, generate a separate first-pass evidence report. Prefix every analysis Markdown filename with the same run-style prefix used by the results basename: `benchmark_<systemname>...`. Prefer `{base}` so the Markdown filename starts with the exact complete run basename and cannot collide with another run:
 
 ```bash
@@ -72,26 +72,36 @@ python3 /etc/codex/skills/csb-analysis/scripts/csb_result_report.py results \
 The report helper writes one Markdown file per complete run when the `--out` path contains placeholders. It also writes a cross-run summary when `--summary-out` is set, and writes adjacent `.html` files for all Markdown reports by default.
 
 4. For each generated run-prefixed report, inspect that run's highest-degradation parameter points and monitor files directly before moving to the next benchmark. Reset the analysis state between runs: recompute baselines, inflection points, monitor summaries, source-correlation candidates, linux-perf/performance-patterns classification, and hypotheses from that run's CSV and monitor artifacts only. When extracting symbols from saved `perf.data` files under `results/`, run offline perf readers with `sudo` so kernel symbols can be resolved, for example `sudo perf report --stdio -i <perf.data> --sort symbol,dso --percent-limit 0.5` and `sudo perf script -i <perf.data>`.
-5. Ensure Linux source exists in `deps/linux`; this tree represents the tested kernel source for benchmark/source correlation. If absent, clone it before making source-code claims:
+5. Ensure Linux source exists in `deps/linux`; this single tree is used for both tested-kernel source correlation and upstream comparison. If absent, clone Torvalds Linux before making source-code claims:
 
 ```bash
-git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git deps/linux
+git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git deps/linux
 ```
 
-If the running kernel is distro-patched, prefer matching sources when available; otherwise state that `deps/linux` is an approximate reference for the tested kernel and source-line correlation may be approximate.
+Identify the distribution and running kernel from the testing machine, not from the analysis host, using artifacts such as `sys-config/uname.txt`, `sys-config/os-release.txt`, `sys-config/kconfig.txt`, `/proc/version`, or remote commands when the host is reachable. Add a distribution remote to `deps/linux` when the kernel is distro/vendor patched, fetch all refs from that remote, and check out the branch/tag/commit that most closely matches the running kernel before source correlation. Prefer exact distro source first, then the nearest distro branch for the same kernel series, then Torvalds main only as an explicitly approximate fallback.
 
-6. Ensure an upstream comparison tree exists in `deps/linux-upstream` before deciding whether to invent a new kernel change, endorse a proposed patch, or describe an interesting hot path as unimproved upstream. Treat `deps/linux-upstream` as the newer upstream kernel reference and `deps/linux` as the tested kernel reference. If `deps/linux-upstream` is absent, clone it before making upstream-comparison claims:
+Suggested remote selection:
+
+- Ubuntu/Debian packaged kernels: add the matching distro kernel git remote when available, otherwise record that package source is required.
+- Fedora/RHEL/CentOS Stream: add the Fedora or CentOS Stream kernel dist-git/kernel-source remote that matches the release.
+- SUSE/openSUSE: add the matching SUSE kernel source remote.
+- Custom kernels such as `6.6.0+`: inspect `/proc/version`, kernel build metadata, local source paths, and any node-specific notes before deciding whether the closest branch is a local source tree, distro branch, stable branch, or Torvalds main.
+
+Record the selected source provenance in every report: distribution, running kernel release, remote name and URL, checked-out branch/tag/commit, `git -C deps/linux rev-parse --short HEAD`, and whether `deps/linux` is dirty. If no matching distribution source can be found, say that source correlation is approximate and name the missing source package/remote.
+
+6. Ensure the same `deps/linux` clone also has a Torvalds remote for upstream comparison. Name it `torvalds` unless that name already exists:
 
 ```bash
-git clone --depth 1 https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git deps/linux-upstream
+git -C deps/linux remote add torvalds https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+git -C deps/linux fetch --all --tags
 ```
 
-When both trees exist, record their commit ids with `git -C deps/linux rev-parse --short HEAD` and `git -C deps/linux-upstream rev-parse --short HEAD`. If either tree has local changes, mention that the comparison includes a dirty tree.
+Do not create or require `deps/linux-upstream`. Compare the selected distribution/tested branch in `deps/linux` against `torvalds/master` or `torvalds/main` from the same clone. Record both commit ids with `git -C deps/linux rev-parse --short HEAD` and `git -C deps/linux rev-parse --short torvalds/master` or `torvalds/main`.
 
 7. Apply linux-perf/performance-patterns refinement before choosing a patch direction: classify the bottleneck as CPU-bound, lock/cacheline-bound, scheduler/wakeup-bound, I/O-wait/device-bound, memory-management-bound, or unresolved; then record which named performance patterns match or do not match. If a fresh perf run would resolve the classification or validate a patch hypothesis, try to set `perf_event_paranoid=-1` with sudo, check/remount tracefs for tracepoint events, and run the smallest useful CSB/perf profile at the relevant baseline/peak/cliff points.
-8. Correlate hot symbols/callers to source with `rg`, `git grep`, and architecture-specific paths. Prefer exact symbol definitions before making patch proposals. Use performance-patterns detail files to choose the correct source structure to inspect, such as lock variables, counters, wait queues, flush queues, shared structs, or hot loops.
-9. For every proposed patch direction or discovered hot kernel path, compare the tested path in `deps/linux` against `deps/linux-upstream`. Use targeted `git -C deps/linux-upstream log -- <path>`, `git -C deps/linux-upstream blame`, `git -C deps/linux-upstream show`, `git diff --no-index deps/linux/<path> deps/linux-upstream/<path>`, and symbol searches to identify upstream changes relevant to the hot function, lock, cacheline, syscall, filesystem, network, scheduler, memory-management, or architecture path. Do not treat unrelated churn as an improvement; require a plausible connection to the measured bottleneck and to the linux-perf/performance-patterns classification.
-10. If upstream appears to improve a hot path or subsume a proposed patch, describe what changed upstream, why it may improve the benchmarked scaling behavior, and whether a backport to the tested kernel would likely help. Include the expected backport shape: commits to inspect/cherry-pick, files/functions touched, minimal pseudo-diff or adaptation plan, dependencies, conflicts, semantic risks, and CSB rerun matrix. If upstream does not contain a relevant improvement, say so and keep the original patch proposal clearly separate.
+8. Correlate hot symbols/callers to source in the checked-out distribution/tested branch of `deps/linux` with `rg`, `git grep`, and architecture-specific paths. Prefer exact symbol definitions before making patch proposals. Use performance-patterns detail files to choose the correct source structure to inspect, such as lock variables, counters, wait queues, flush queues, shared structs, or hot loops.
+9. For every proposed patch direction or discovered hot kernel path, compare the selected distribution/tested branch in `deps/linux` against Torvalds main in the same clone. Use targeted commands such as `git -C deps/linux log HEAD..torvalds/master -- <path>`, `git -C deps/linux log HEAD..torvalds/main -- <path>`, `git -C deps/linux diff HEAD..torvalds/master -- <path>`, `git -C deps/linux show torvalds/master:<path>`, and symbol searches to identify upstream changes relevant to the hot function, lock, cacheline, syscall, filesystem, network, scheduler, memory-management, or architecture path. Do not treat unrelated churn as an improvement; require a plausible connection to the measured bottleneck and to the linux-perf/performance-patterns classification.
+10. If Torvalds main appears to improve a hot path or subsume a proposed patch, describe what changed upstream, why it may improve the benchmarked scaling behavior, and whether a backport to the selected distribution/tested branch would likely help. Include the expected backport shape: commits to inspect/cherry-pick, files/functions touched, minimal pseudo-diff or adaptation plan, dependencies, conflicts, semantic risks, and CSB rerun matrix. If Torvalds main does not contain a relevant improvement, say so and keep the original patch proposal clearly separate.
 11. Produce one detailed document per complete run unless the user explicitly asks for a cross-run synthesis. Both Markdown result files for a run must start with the same `benchmark_<systemname>` prefix taken from the run filename, and should normally start with the full run basename. For example: `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_analysis.md` and `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_csb-analysis.md`. For every analysis Markdown file, generate an adjacent HTML file with the same stem:
 
 ```bash
@@ -105,10 +115,10 @@ For "all results", create independent per-run documents first; then add or updat
    - Link each run's original result HTML, e.g. `[result html](benchmark_<...>.html)`.
    - Link each generated detailed analysis HTML from the summary, e.g. `[analysis html](benchmark_<...>_csb-analysis.html)`.
    - Link Linux source files referenced in source-correlation tables or notes, using paths relative to the report location, e.g. `[fs/sync.c:180](../deps/linux/fs/sync.c#L180)`.
-   - Link upstream comparison source files when discussing upstream improvements, e.g. `[fs/sync.c:180](../deps/linux-upstream/fs/sync.c#L180)`.
+   - When discussing Torvalds-main improvements, link the checked-out local path in `deps/linux` and name the compared Torvalds ref/commit in text; do not link to `deps/linux-upstream`.
    - Prefer linked paths over plain backticked paths for navigational targets; keep non-file identifiers such as symbols, benchmark names, and execution types in backticks.
 14. When the user asks to prepare kernel patches, create per-run patch-series artifacts instead of editing the benchmark evidence reports in place. For each run directory, create a descriptive folder such as `patch-series-ext4-fsync-flush-coalescing/` or `patch-series-vfs-namei-negative-lookup-cache/`. Put the generated patch file and its safety/implications documentation in that folder, and update a global index such as `results/kernel_patch_preparation_summary.md`.
-15. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing result HTML or analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)` and `[fs/sync.c:180](../../../deps/linux-upstream/fs/sync.c#L180)`, not the shallower summary/report path.
+15. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing result HTML or analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)`, not the shallower summary/report path.
 
 ## Runner Comparison Reports
 
@@ -180,7 +190,7 @@ Write the final analysis as a technical document, not a raw dump:
 - linux-perf refinement: summarize scaling factors, marginal gains, dual-profile deltas, hardware counters, c2c/cacheline evidence, annotate findings, and any perf permission/debug-symbol limits that affect confidence.
 - performance-patterns classification: list matching patterns, explicitly rule out misleading patterns, and connect any match to the candidate kernel resolution strategy.
 - Source correlation: map symbols/callers to `deps/linux` files/functions, explain relevant code paths, and cite the search method.
-- Upstream comparison: map the same hot files/functions to `deps/linux-upstream`, summarize relevant upstream commits or diffs, and state whether upstream already changes the measured bottleneck path.
+- Upstream comparison: map the same hot files/functions from the selected distribution/tested branch in `deps/linux` to the chosen Torvalds ref in the same clone, summarize relevant upstream commits or diffs, and state whether Torvalds main already changes the measured bottleneck path.
 - Navigation links: locally link referenced original result HTML, generated analysis HTML, and Linux source files/line anchors so readers can move directly from summaries to detailed evidence and source.
 - Hypothesis: explain the likely bottleneck and confidence level.
 - Patch/backport proposal: state concrete kernel change direction or upstream backport direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
@@ -194,7 +204,7 @@ The patch proposal can be a design note or pseudo-diff unless the user asks for 
 - code path and lock/data structure involved;
 - linux-perf/performance-patterns classification and why the chosen patch shape follows from it;
 - why many-core scaling degrades;
-- upstream status from `deps/linux-upstream`: relevant commits/diffs if upstream improved the path, or a brief note that no relevant upstream improvement was found;
+- upstream status from Torvalds main in the same `deps/linux` clone: relevant commits/diffs if upstream improved the path, or a brief note that no relevant upstream improvement was found;
 - backport recommendation when upstream is ahead: whether to cherry-pick, adapt a subset, or avoid backporting; expected conflicts/dependencies; and a minimal patch shape for the tested `deps/linux` tree;
 - alternative mitigations considered;
 - validation metrics from CSB that should improve;
@@ -239,7 +249,7 @@ If the implementation is not production-ready, mark the patch subject and filena
 - links to the detailed Markdown/HTML report and original result HTML when present;
 - link back to the cross-run summary;
 - source-correlation links to `deps/linux` paths with correct relative paths from the patch-series folder;
-- upstream-comparison links to `deps/linux-upstream` paths with correct relative paths from the patch-series folder when upstream contains relevant changes;
+- upstream-comparison notes naming the compared Torvalds ref/commit in `deps/linux`; link source paths through the local `deps/linux` checkout rather than `deps/linux-upstream`;
 - why this patch was selected and why it is expected to be profitable;
 - linux-perf/performance-patterns evidence used to select or reject this patch theme;
 - what the patch changes at the subsystem/function level;
