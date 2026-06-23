@@ -199,7 +199,6 @@ For config-only changes:
 
 ```bash
 python3 -m json.tool config/<file>.json >/dev/null
-scripts/run-single.sh config/<file>.json --help
 ```
 
 For real validation, run a short/small config first: one repeat, low duration, one or two execution-unit counts, and monitors disabled if you only need application wiring.
