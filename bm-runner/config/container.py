@@ -112,7 +112,6 @@ class ContainersConfig(dict):
             """
             )
             self.container_list = self.__gen_container_list(max_num_containers)
-            max_cpu_count = max(self.container_list)
             # at the moment we don't respect the pack group policy when
             # determining max #containers, hence when the policy is set to pack by
             # e.g NUMA this can lead to oversubscription. For the time being
@@ -130,9 +129,9 @@ class ContainersConfig(dict):
                 # does not want to interrupt it, and is ok with oversubscription.
         else:
             self.container_list = ListConfig.from_dict(container_list).get_list()
-            # Calculate the maximum number of CPUs needed.
-            # max number of containers * cores per container
-            max_cpu_count = max(self.container_list) * self.core_count
+        # Calculate the maximum number of CPUs needed.
+        # max number of containers * cores per container
+        max_cpu_count = max(self.container_list) * self.core_count
 
         self.cpus = self.topo.select(
             count=max_cpu_count, policy=self.policy, pre_selected=pre_selected_cpus
@@ -194,6 +193,7 @@ class ContainersConfig(dict):
         last = first + self.core_count  # last index (exclusive)
         assert last <= len(self.cpus)
         cpus_lst = self.cpus[first:last]
+        assert len(cpus_lst) == self.core_count
         cpus_str: str = ",".join(map(str, cpus_lst))
         bm_log(f"Execution Unit#{eu_idx} will be assigned CPUS: {cpus_str}")
         return cpus_str

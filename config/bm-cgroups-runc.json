@@ -1,0 +1,131 @@
+{
+  "plots": [
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "time",
+      "y_lbl": "Total Time(s)",
+      "hue": "execution_unit",
+      "hue_lbl": "Executor",
+      "shape": "barplot",
+      "title": "Total container create/delete time"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "create_time",
+      "y_lbl": "Create Time(s)",
+      "hue": "execution_unit",
+      "hue_lbl": "Executor",
+      "shape": "barplot",
+      "title": "runc create time"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "delete_time",
+      "y_lbl": "Delete Time(s)",
+      "hue": "execution_unit",
+      "hue_lbl": "Executor",
+      "shape": "barplot",
+      "title": "runc delete time"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "cache-misses",
+      "y_lbl": "Perf stat Cache-misses",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "Cache-misses vs. #Containers",
+      "shape": "barplot"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "branch-misses",
+      "y_lbl": "Perf stat Branch-misses",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "Branch-misses vs. #Containers",
+      "shape": "barplot"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "faults",
+      "y_lbl": "Perf stat faults",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "faults vs. #Containers",
+      "shape": "barplot"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "cgroup-switches",
+      "y_lbl": "Perf stat cgroup-switches",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "cgroup-switches vs. #Containers",
+      "shape": "barplot"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "perf_lock_avg_wait",
+      "y_lbl": "Average wait of all locks",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "Lock avg wait vs. #Containers",
+      "shape": "barplot"
+    },
+    {
+      "x": "container_cnt",
+      "x_lbl": "#Containers",
+      "y": "perf_lock_total_wait",
+      "y_lbl": "Total wait of all locks",
+      "hue": "execution_type",
+      "hue_lbl": "Execution Env",
+      "title": "Lock avg wait vs. #Containers",
+      "shape": "barplot"
+    }
+  ],
+  "benchmark_config": {
+    "exec_env": [
+      "native"
+    ],
+    "monitors": {
+      "perf": [
+        "-C",
+        "0",
+        "--all-kernel"
+      ],
+      "perf_stat": [
+        "-C",
+        "0",
+        "-e",
+        "cache-references,cache-misses,faults,cgroup-switches"
+      ],
+      "perf_lock": [
+        "-C",
+        "0"
+      ],
+      "iostat": []
+    }
+  },
+  "containers": {
+    "core_count": 1,
+    "core_assignment_policy": {
+      "cpu_order": "asc",
+      "pack_group": "none",
+      "one_cpu_per_core": true
+    }
+  },
+  "applications": [
+    {
+      "name": "sudo",
+      "args": "./bm-external/cgroups/bm-cgroups.py --index {index} --units {n_units} --iterations 100 --runtime runc --root ./bm-external/cgroups/"
+    }
+  ]
+}
