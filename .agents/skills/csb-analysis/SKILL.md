@@ -46,7 +46,7 @@ stated.
 Before analysis, check whether `performance-patterns` is available as a skill
 or local reference under `deps/intel-performance-skills/skills/performance-patterns`.
 If it is absent, record that classification as unavailable. Use `deps/linux`
-for source correlation and local history when present; if absent, clone lates Linux
+for source correlation and local history when present; if absent, clone latest Linux
 tree and use branch main as upstream. Add a remote to the git tree for the
 distribution specific kernel version. Use a commit or branch that matches the test
 machine kernel version. This vendor specific tree and checkout serves as the current
