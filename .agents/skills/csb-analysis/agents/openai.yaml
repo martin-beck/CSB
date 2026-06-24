@@ -1,6 +1,6 @@
 interface:
   display_name: "CSB Analysis"
-  short_description: "Analyze CSB result drops and prepare evidence-backed kernel patch artifacts"
-  default_prompt: "Use $csb-analysis to analyze existing CSB results under results/, correlate benchmark drops with saved monitor and kernel profiling evidence, map hot paths to local Linux source/history, and prepare patch artifacts when evidence supports a concrete change."
+  short_description: "Analyze CSB performance degradation and prepare evidence-backed kernel patch artifacts"
+  default_prompt: "Use $csb-analysis to analyze existing CSB results under results/, correlate benchmark degradation with saved monitor and kernel profiling evidence, map hot paths to local Linux source/history, and prepare patch artifacts when evidence supports a concrete change."
 policy:
   allow_implicit_invocation: true
