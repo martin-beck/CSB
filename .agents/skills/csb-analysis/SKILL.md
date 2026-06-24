@@ -1,13 +1,13 @@
 ---
 name: csb-analysis
-description: "Use when analyzing existing CSB result artifacts under results/ and preparing evidence-backed kernel patch artifacts from benchmark CSVs, saved monitor data, perf/flamegraph/lock evidence, local Linux source correlation, and local upstream/vendor history."
+description: "Use when analyzing existing CSB result artifacts under results/ and preparing evidence-backed kernel patch artifacts from benchmark CSVs, saved monitor data, perf/flamegraph/lock evidence, Linux source correlation, and upstream/vendor history."
 ---
 
 # CSB Analysis
 
 Use this skill for post-run CSB result analysis and the kernel patch artifacts
 that follow from that analysis. Do not run new experiments or mutate benchmark
-inputs, CSB internals, host tracing state, or kernel source trees.
+inputs, CSB internals, or host tracing state.
 
 Use CSB documentation as the source of truth for framework facts:
 
@@ -17,22 +17,16 @@ Use CSB documentation as the source of truth for framework facts:
 - Builtin benchmark output format and metric names: `doc/bench.md`
 - Development commands and repository discipline: `doc/development.md`
 
-Operational material that is still outside this skill has been moved to
-`out-of-scope-operational-notes.md`. Do not follow that file during normal
-`csb-analysis`; it is retained only as a parking place for future skills or
-workflows.
-
 ## Guardrails
 
+- Do not modify any existing results, only write to new files.
 - Analyze existing artifacts only.
 - Write only analysis reports and kernel patch-preparation artifacts under
   `results/`.
 - Do not modify applications, configs, generated CSB files, runner code,
-  monitor setup, framework files, host perf/tracefs/sysctl/cgroup/Docker/NIC
-  state, or Linux source trees.
-- Do not clone, fetch, switch, reset, or otherwise mutate kernel or external
-  repositories.
-- If artifacts, permissions, symbols, source trees, or comparison refs are
+  monitor setup, framework files, or host perf/tracefs/sysctl/cgroup/Docker/NIC
+  state.
+- If artifacts, permissions, symbols are
   missing, state the limitation directly.
 - Treat every benchmark as an independent experiment unless the user requests a
   cross-benchmark synthesis.
@@ -40,7 +34,7 @@ workflows.
 ## Inputs
 
 Start from the CSB repository root unless the user gives another path. A result
-set normally includes a result directory plus sibling `.csv`, `.json`, and
+set at least includes a result directory plus sibling `.csv`, `.json`, and
 `.html` files; consult `doc/bm-runner.md` and `doc/bench.md` for the runner and
 benchmark output contracts.
 
@@ -52,8 +46,11 @@ stated.
 Before analysis, check whether `performance-patterns` is available as a skill
 or local reference under `deps/intel-performance-skills/skills/performance-patterns`.
 If it is absent, record that classification as unavailable. Use `deps/linux`
-for source correlation and local history when present; if absent, source mapping
-and patch creation are blocked.
+for source correlation and local history when present; if absent, clone lates Linux
+tree and use branch main as upstream. Add a remote to the git tree for the
+distribution specific kernel version. Use a commit or branch that matches the test
+machine kernel version. This vendor specific tree and checkout serves as the current
+running kernel source.
 
 ## Workflow
 
@@ -109,10 +106,9 @@ For each benchmark/run:
    Use already available local trees, usually `deps/linux`. Search exact symbols
    first, then wrappers/callers from stacks. Record the tree path, current
    commit, dirty status, and whether the source appears to match the tested
-   kernel. Do not maintain permanent symbol-to-file mappings in the skill; cite
-   lookup evidence in the report.
+   kernel. Cite fymbol-to-file mapping lookup evidence in the report.
 
-9. Inspect local history only when available.
+9. Inspect local history.
    Compare candidate hot paths against already available vendor or upstream refs
    in `deps/linux`. Include only commits plausibly related to the measured path,
    lock, syscall, filesystem, memory-management, scheduler, network, block,
@@ -128,7 +124,7 @@ For each benchmark/run:
     Create a per-run `results/<base>_patch-series-<theme>/` directory containing
     the patch, `README.md`, and `SAFETY_IMPLICATIONS_AND_DESCRIPTION.md`. Use
     an RFC patch when the change is hypothesis-driven and not rerun-validated.
-    Add or update `results/kernel_patch_preparation_summary.md` as an index.
+    Add or update `results/<base>_kernel_patch_preparation_summary.md` as an index.
 
 12. Validate local links.
     Resolve Markdown links from the file that contains them. Link existing
