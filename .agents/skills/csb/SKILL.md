@@ -1,11 +1,13 @@
 ---
 name: csb
-description: "Use for operating the CSB Container Scalability Benchmarks framework: preparing the runtime environment, choosing or adapting JSON configs for a target application, running bm-runner campaigns, configuring linux-perf-friendly monitors, replotting existing results, enabling/disabling monitors/plugins, and refreshing configs for ordinary benchmark runs. Do not use for modifying CSB internals; use csb-dev. Do not use for syzkaller/bm-generator internals; use csb-syzkaller or csb-syzkaller-dev."
+description: "Use for operating the CSB Container Scalability Benchmarks framework: preparing the runtime environment, choosing or adapting JSON configs for a target application, running bm-runner campaigns, configuring linux-perf-friendly monitors, replotting existing results, enabling/disabling monitors/plugins, and refreshing configs for ordinary benchmark runs. For SSH/remote benchmark hosts, use csb-remote alongside this skill. Do not use for modifying CSB internals; use csb-dev. Do not use for syzkaller/bm-generator internals; use csb-syzkaller or csb-syzkaller-dev."
 ---
 
 # CSB Usage
 
 Use this skill to run CSB benchmark campaigns and adapt benchmark configurations. Stay on the user-facing surfaces: `config/`, `scripts/`, `bench/targets/`, `results/`, `doc/`, and runner commands. If the task requires editing `bm-runner/` framework code, adding monitors/plugins/framework behavior, or debugging internals, switch to `csb-dev`.
+
+For SSH/remote benchmark hosts, also use `csb-remote`. In that mode, run preparation, dependency installation, permission checks, config validation, benchmark commands, monitor checks, and replotting on the remote CSB checkout; copy final results back to the controller using the remote-specific layout defined by `csb-remote`.
 
 ## First Checks
 

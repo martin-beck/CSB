@@ -1,11 +1,13 @@
 ---
 name: csb-dev
-description: "Use when developing or debugging CSB framework internals: bm-runner Python code, configuration parser classes, execution units, monitors, plots, plugins, adapters, Docker/native process orchestration, tests, or framework documentation. Use csb for running/adapting benchmark campaigns without changing framework code."
+description: "Use when developing or debugging CSB framework internals: bm-runner Python code, configuration parser classes, execution units, monitors, plots, plugins, adapters, Docker/native process orchestration, tests, or framework documentation. For SSH/remote-only behavior, use csb-remote alongside this skill. Use csb for running/adapting benchmark campaigns without changing framework code."
 ---
 
 # CSB Development
 
 Use this skill for framework implementation work inside CSB. For ordinary benchmark operation and config adaptation, use `csb`. For syzkaller generator internals, use `csb-syzkaller-dev`.
+
+For bugs or validation that depend on a remote benchmark host's kernel, hardware, topology, permissions, containers, perf, bpftrace, or installed runtimes, also use `csb-remote`. Reproduce, test, and validate on the remote CSB checkout; copy logs, test output, configs, and results back to the controller when they are part of the deliverable.
 
 ## First Checks
 

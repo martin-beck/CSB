@@ -1,11 +1,13 @@
 ---
 name: csb-analysis
-description: "Use when analyzing CSB results in a results/ directory, especially per-run benchmark folders with matching .json/.html/.csv artifacts, monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, bpftrace, linux-perf workflows, performance-patterns classification, or requests to explain process/container scaling degradation, correlate bottlenecks with Linux kernel source, compare distribution-kernel hot paths against Torvalds main using one deps/linux clone, or propose/backport kernel patch directions for many-core systems."
+description: "Use when analyzing CSB results in a results/ directory, especially per-run benchmark folders with matching .json/.html/.csv artifacts, monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, bpftrace, linux-perf workflows, performance-patterns classification, or requests to explain process/container scaling degradation, correlate bottlenecks with Linux kernel source, compare distribution-kernel hot paths against Torvalds main using one deps/linux clone, or propose/backport kernel patch directions for many-core systems. For SSH/remote benchmark hosts or copied remote artifacts, use csb-remote alongside this skill."
 ---
 
 # CSB Analysis
 
 Analyze CSB result runs as separate experiments, then connect benchmark scaling behavior to monitor evidence and Linux kernel code. Use the base `csb` skill for runner/config mechanics; use this skill when the task is post-run performance analysis. When `results/` contains multiple complete benchmarks/runs, rerun the full analysis workflow for each one independently; do not reuse hypotheses, baselines, monitor conclusions, or source-correlation assumptions from another benchmark unless a later cross-run comparison is explicitly requested.
+
+For SSH/remote benchmark hosts, also use `csb-remote`. Treat the remote as the tested machine: run perf readers, tracefs/perf permission checks, source checkout updates, package installs, object builds, and any fresh validation benchmarks on the remote unless the user explicitly asks for offline host-only analysis of already copied artifacts. Copy generated reports and supporting artifacts back to the controller under remote-specific result directories.
 
 ## Performance Skill Integration
 
@@ -78,7 +80,7 @@ The report helper writes one Markdown file per complete run when the `--out` pat
 git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git deps/linux
 ```
 
-Identify the distribution and running kernel from the testing machine, not from the analysis host, using artifacts such as `sys-config/uname.txt`, `sys-config/os-release.txt`, `sys-config/kconfig.txt`, `/proc/version`, or remote commands when the host is reachable. Add a distribution remote to `deps/linux` when the kernel is distro/vendor patched, fetch all refs from that remote, and check out the branch/tag/commit that most closely matches the running kernel before source correlation. Prefer exact distro source first, then the nearest distro branch for the same kernel series, then Torvalds main only as an explicitly approximate fallback.
+Identify the distribution and running kernel from the testing machine using artifacts such as `sys-config/uname.txt`, `sys-config/os-release.txt`, `sys-config/kconfig.txt`, `/proc/version`, or remote commands when the machine is reachable. For remote workflows, do this in the remote `deps/linux` tree following `csb-remote`, then copy source-provenance notes back with the reports. Add a distribution remote to `deps/linux` when the kernel is distro/vendor patched, fetch all refs from that remote, and check out the branch/tag/commit that most closely matches the running kernel before source correlation. Prefer exact distro source first, then the nearest distro branch for the same kernel series, then Torvalds main only as an explicitly approximate fallback.
 
 Suggested remote selection:
 

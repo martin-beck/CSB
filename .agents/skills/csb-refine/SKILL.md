@@ -1,6 +1,6 @@
 ---
 name: csb-refine
-description: "Use when a CSB benchmark needs an iterative kernel-performance refinement loop: run or rerun CSB, collect perf/all-available-monitor evidence, analyze bottlenecks with csb-analysis plus linux-perf and performance-patterns, adapt temporary benchmark configs for runtime, instance counts, native/container mode, monitors, perf/tracefs settings, bpftrace probes, temporary host-stat monitors, and continue refined runs without self-imposed continuation stops until either a clear many-core kernel data-structure congestion signal emerges or multiple thorough runs confidently rule out kernel-code scalability issues. Create and object-build-test an RFC-style kernel patch for the most likely optimization when a kernel-side signal is found, and produce concise and detailed refined reports."
+description: "Use when a CSB benchmark needs an iterative kernel-performance refinement loop: run or rerun CSB, collect perf/all-available-monitor evidence, analyze bottlenecks with csb-analysis plus linux-perf and performance-patterns, adapt temporary benchmark configs for runtime, instance counts, native/container mode, monitors, perf/tracefs settings, bpftrace probes, temporary host-stat monitors, and continue refined runs without self-imposed continuation stops until either a clear many-core kernel data-structure congestion signal emerges or multiple thorough runs confidently rule out kernel-code scalability issues. For SSH/remote benchmark hosts, use csb-remote alongside this skill. Create and object-build-test an RFC-style kernel patch for the most likely optimization when a kernel-side signal is found, and produce concise and detailed refined reports."
 ---
 
 # CSB Refine
@@ -15,8 +15,11 @@ Use these skills in order as needed:
 2. `csb-analysis`: for complete-run detection, per-run reports, cross-run summaries, source correlation, upstream comparison, patch/backport direction, and link checks.
 3. `linux-perf`: for perf permission setup, Flow D-style scaling, perf stat/report/annotate/c2c/tracepoint collection, and dual-profile reasoning.
 4. `performance-patterns`: for deciding which named patterns match or do not match, and for reading the relevant pattern detail files before suggesting fixes.
+5. `csb-remote`: when benchmark execution, analysis reruns, monitor collection, dependency installation, source checkout, or object-build testing happens on one or more SSH remote hosts.
 
 If `linux-perf` or `performance-patterns` is not available but `deps/intel-performance-skills/skills/<skill>/SKILL.md` exists, read the local skill files. If the local tree is missing and network access is approved, clone `https://github.com/intel/intel-performance-skills.git` into `deps/intel-performance-skills`.
+
+For remote refinement, the controller host supplies the skills and orchestration, but every benchmark sweep, cleanup, monitor run, permission change, package install, source checkout/update, analysis command that depends on remote artifacts, and kernel object build must execute on the remote. Copy final reports, configs, generated bpftrace programs, monitor artifacts, logs, and patches back using the layout in `csb-remote`.
 
 ## Persistence
 
