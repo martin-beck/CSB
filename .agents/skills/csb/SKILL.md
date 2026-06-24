@@ -40,9 +40,7 @@ For one benchmark config, prefer:
 scripts/run-single.sh config/<file>.json [extra main.py args]
 ```
 
-`scripts/run-single.sh` prepares the venv and common paths, sets `FLAMEGRAPH`, `SHE_HULK_ADAPTERS`, `CSB_ADAPTERS`, `CSB_PLUGINS`, sets `CSB_NO_BUILD_BENCH=ON`, raises the open-file limit to the hard limit, then invokes `bm-runner/main.py`.
-
-Useful environment toggles can be found in `doc/bm-config.md#environment-variables`
+Useful environment toggles can be found in `doc/bm-config.md#environment-variables`.
 
 Running full benchmarks may require Docker access, `perf`, `sysstat`, sudo-able NIC operations, and host permissions. If these fail, report the exact missing capability.
 
