@@ -128,7 +128,7 @@ git clone https://github.com/intel/intel-performance-skills.git deps/intel-perfo
 Use the linux-perf setup guidance to decide which monitors are worth enabling. Prefer the smallest monitor set that answers the question:
 
 - CPU/syscall hot path: enable CSB `perf` and `mpstat`.
-- Lock contention: enable lock-contention/perf-lock monitors if available.
+- Lock contention: enable `perf_lock` monitor if available.
 - Cache-line contention or false sharing: collect `perf c2c` evidence when host permissions and hardware support allow it.
 - I/O or fsync/writeback cliffs: enable `mpstat`, `iostat` if available, and a block/flush bpftrace or perf tracepoint monitor if the config supports it.
 - Scheduler/wakeup cliffs: collect context-switch, sched latency, futex/wakeup, or scheduler tracepoint evidence when available.
