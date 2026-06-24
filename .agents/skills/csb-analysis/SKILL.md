@@ -5,11 +5,11 @@ description: "Use when analyzing existing CSB result artifacts in a results/ dir
 
 # CSB Analysis
 
-Use this skill for post-run CSB result analysis and the kernel patch artifacts that follow from that analysis. The goal is to explain where benchmark throughput starts degrading as execution units increase, which saved monitor signals move with that degradation, which kernel functions become hotter in collected perf/flamegraph evidence, whether those paths have relevant history in already available local kernel trees, and what concrete kernel patch should be produced from the evidence.
+Use this skill for post-run CSB result analysis and the kernel patch artifacts that follow from that analysis. The goal is to explain where benchmark performance starts degrading as execution units increase, which saved monitor signals move with that degradation, which kernel functions become hotter in collected perf/flamegraph evidence, whether those paths have relevant history in already available local kernel trees, and what concrete kernel patch should be produced from the evidence.
 
 This skill does not run new experiments or mutate benchmark inputs. It may write analysis reports and kernel patch-preparation artifacts under `results/`, but it remains read-only with respect to benchmark execution, applications, configurations, CSB internals, host tracing state, and kernel source trees:
 
-- Do not run benchmarks or fresh profiling campaigns.
+- Do not run benchmarks or refresh profiling campaigns.
 - Do not modify applications, benchmark configs, generated CSB files, runner code, monitor setup, or CSB framework files.
 - Do not clone, fetch, switch, reset, or otherwise mutate kernel source trees or external skill repositories.
 - Do not change host perf, tracefs, sysctl, cgroup, Docker, NIC, or scheduler state.
@@ -63,43 +63,42 @@ For each benchmark/run:
 
 2. Identify the execution-unit axis.
    - Prefer the benchmark CSV dimension that actually changes, commonly `container_cnt`.
-   - If the run varies `nb_threads`, process count, or another execution-unit field instead, use that field and name it consistently.
+   - If the run varies `nb_threads`, container/process count, or another execution-unit field instead, use that field and name it consistently.
    - Keep `execution_type`, `nb_threads`, `noise`, `initial_size`, `kernel`, host, and benchmark name separated unless they are constant.
 
-3. Establish the throughput signal.
-   - Prefer `throughput_min` for conservative degradation analysis when present.
-   - If another throughput column is the only valid signal, state why it was chosen.
-   - Track success and latency columns, such as `univ_succ_percent`, `univ_avg`, `univ_min`, and `univ_max`, when present.
+3. Establish the performance signal.
+   - Check `throughput_min` for conservative degradation analysis when present.
+   - If another performance column is giving a stronger signal, state why it was chosen.
+   - Track all success and latency columns, such as `univ_succ_percent`, `univ_avg`, `univ_min`, and `univ_max`, when present.
 
 4. Run CSB analyzer output as part of the analysis when practical.
    - Use the existing CSB analyzer, `bm-runner/analyze.py` (`csb-analyze` in this skill), against a directory containing only the intended top-level benchmark result CSVs.
-   - Treat analyzer outputs as first-pass aggregate evidence for throughput, success, kernel comparison, and drop points. They do not replace per-run monitor, perf, lock, source, and history analysis.
+   - Treat analyzer outputs as first-pass aggregate evidence for performance, success, kernel comparison, and drop points. They do not replace per-run monitor, perf, lock, source, and history analysis.
    - Keep analyzer artifacts linked from the report when they are created, and record when the analyzer could not be used due to missing dependencies, invalid CSV columns, or unsafe mixed inputs.
    - Do not use the analyzer to run benchmarks or modify benchmark configurations.
 
 5. Find degradation points.
-   - Compute throughput by execution-unit count for each independent dimension group.
-   - Identify the peak or plateau, then the first point where throughput drops materially.
-   - Use explicit thresholds in the report. A useful default is: first point after the peak where throughput is at least 10% below peak, or where marginal scaling becomes negative and remains negative.
+   - Compute performance by execution-unit count for each independent dimension group.
+   - Identify the peak or plateau, then the first point where performance drops materially.
+   - Use explicit thresholds in the report. A useful default is: first point after the peak where performance is at least 10% below peak, or where marginal scaling becomes negative and remains negative.
    - Record degradation against both the smallest execution-unit count and the peak/plateau when possible.
 
 6. Correlate saved monitor signals with the degradation.
    - Read monitor files collected at baseline, peak/plateau, first degradation point, and largest execution-unit count.
-   - For each numeric monitor series, classify its relation to throughput:
-     - `inverse increase`: monitor value rises while throughput falls.
-     - `direct decrease`: monitor value falls while throughput falls.
-     - `direct increase`: monitor value rises while throughput rises before the cliff.
-     - `inverse decrease`: monitor value falls while throughput rises before the cliff.
+   - For each numeric monitor series, classify its relation to performance:
+     - `inverse increase`: monitor value rises while performance falls.
+     - `direct decrease`: monitor value falls while performance falls.
+     - `direct increase`: monitor value rises while performance rises before the cliff.
+     - `inverse decrease`: monitor value falls while performance rises before the cliff.
      - `flat/noisy`: movement is too small, inconsistent, or unsupported.
-   - Prefer concrete ratios or percentage movement over vague words. Example: "`mpstat sys` rises from 18% at 16 units to 61% at 96 units while throughput falls 42% from peak."
+   - Prefer concrete ratios or percentage movement over vague words. Example: "`mpstat sys` rises from 18% at 16 units to 61% at 96 units while performance falls 42% from peak."
    - Do not infer kernel source paths from monitor filenames alone. Use monitor data to form hypotheses, then locate source through symbols, call stacks, tracepoint names, syscall names, lock callers, and kernel-tree search.
 
 7. Extract hot kernel functions from saved artifacts.
    - Use collected `perf.data`, `perf report` text, `perf script` output, `perf lock`, flamegraph folded stacks, SVG flamegraphs, lock-contention CSVs, bpftrace output, or similar artifacts when present.
    - Compare hot stacks/functions across execution-unit counts, especially baseline, peak/plateau, first degradation point, and largest count.
    - List functions that become wider or consume more samples/cycles as execution-unit count increases.
-   - Prefer functions near the top of widening stacks, lock callers with growing wait, and kernel symbols whose percentage or absolute sample count increases with the throughput drop.
-   - Strip compiler suffixes and offsets before source lookup, for example `.isra`, `.constprop`, `.llvm`, and `+0x...`.
+   - Prefer functions near the top of widening stacks, lock callers with growing wait, and kernel symbols whose percentage or absolute sample count increases with the performance drop.
    - If saved `perf.data` cannot be read or kernel symbols are unavailable due to permissions, report that limitation; do not change host perf permissions.
 
 8. Map functions to existing local source trees.
@@ -155,7 +154,7 @@ python3 -m markdown -x tables -x extra results/<analysis-file>.md > results/<ana
       - what the patch changes at the subsystem/function level;
       - whether the patch is a novel RFC change, a backport/adaptation of upstream work, or a combination;
       - safety level and assumptions;
-      - implications for semantics, latency, throughput, memory, fairness, crash consistency, permissions, LSM/fsnotify/accounting, cgroups, and architecture-specific behavior as applicable;
+      - implications for semantics, latency, performance, memory, fairness, crash consistency, permissions, LSM/fsnotify/accounting, cgroups, and architecture-specific behavior as applicable;
       - validation checklist and benchmark rerun matrix.
     - Patch/backport proposals must state concrete kernel change direction or upstream backport direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
     - Before reporting patch preparation as complete, count patch-series directories and patch files for the intended run set, ensure each patch-series directory has `README.md` and `SAFETY_IMPLICATIONS_AND_DESCRIPTION.md`, and check for stale or broken source links.
@@ -169,15 +168,15 @@ python3 -m markdown -x tables -x extra results/<analysis-file>.md > results/<ana
 
 ## CSB Analyzer And Runner Comparison Reports
 
-Use `bm-runner/analyze.py` as the CSB analyzer (`csb-analyze`) for existing CSB result CSVs. It is part of the analysis workflow for aggregate throughput and linearity checks, but it is not a replacement for the per-run evidence workflow above and must not be used to run benchmarks or modify configurations.
+Use `bm-runner/analyze.py` as the CSB analyzer (`csb-analyze`) for existing CSB result CSVs. It is part of the analysis workflow for aggregate performance and linearity checks, but it is not a replacement for the per-run evidence workflow above and must not be used to run benchmarks or modify configurations.
 
 The script:
 
 - recursively discovers `.csv` files under supplied folders;
 - expects default CSB benchmark result CSV columns such as `algo_name`, `throughput_min`, `container_cnt`, `univ_succ_percent`, `kernel`, `execution_type`, `hostname`, and `nb_threads`;
 - groups by benchmark, execution type, hostname, kernel, and thread count;
-- averages throughput and success percent per `container_cnt`;
-- computes `linearity` as throughput relative to the smallest container count in the same group;
+- averages performance and success percent per `container_cnt`;
+- computes `linearity` as performance relative to the smallest container count in the same group;
 - writes `analysis-results-<timestamp>/` with combined `results.csv`, `results.md`, `results.html`, per-benchmark text tables, PNG plots, and `linearity.md`.
 
 Before using it, avoid these known traps:
@@ -185,13 +184,13 @@ Before using it, avoid these known traps:
 - Do not point it at a full `results/` tree unless you first filter/copy only top-level benchmark result CSVs. It recursively picks up monitor CSVs such as `lock-contention.csv` and can crash with missing columns like `algo_name`.
 - Ensure `tabulate` is installed, because pandas `to_markdown()` requires it and `requirements.txt` may not list it.
 - If no valid benchmark CSVs remain, expect `pd.concat()` to fail; report this as "no valid CSB benchmark result CSVs" instead of treating it as an analysis result.
-- Do not interpret its `linearity` column as scaling efficiency unless verified. As implemented it is speedup relative to the smallest container count, not `throughput(N) / (throughput(1) * N)`.
+- Do not interpret its `linearity` column as scaling efficiency unless verified. As implemented it is speedup relative to the smallest container count, not `performance(N) / (performance(1) * N)`.
 - Keep `noise`, `initial_size`, and other omitted dimensions in mind. The script currently groups by `algo_name`, `execution_type`, `hostname`, `kernel`, and `nb_threads`; if other dimensions vary, analyze manually or keep inputs separated.
-- Guard against zero baseline throughput before relying on linearity output.
+- Guard against zero baseline performance before relying on linearity output.
 
 ## Evidence Rules
 
-- Benchmark throughput is the primary signal. Monitor data explains it; monitor data does not replace it.
+- Benchmark throughput is the primary signal if documentation beneath `doc/` does not specify a different performance metric as primary signal. An example are some `bm_external` benchmarks, which use time as primary fignal with a fixed amount of iterations. Monitor data explains it; monitor data does not replace it.
 - Use baseline, peak/plateau, first degradation point, and maximum execution-unit point as the minimum comparison set when data exists.
 - Compare by `execution_type`, `container_cnt`, `nb_threads`, `noise`, and `initial_size`; do not collapse dimensions unless they are constant.
 - Keep native and container execution types separate unless explicitly comparing them.
@@ -201,7 +200,7 @@ Before using it, avoid these known traps:
 - Do not claim a kernel root cause from one signal alone. Require at least a benchmark inflection plus matching monitor movement plus plausible stack/function/source evidence.
 - Treat upstream or vendor history as "possibly relevant" unless a commit clearly changes the measured path in a way that matches the bottleneck.
 - Prefer local Markdown links for result HTML, monitor files, source paths, and generated kernel-change artifacts.
-- In cross-run summaries, rank evidence strength separately from observed degradation. A severe throughput cliff with missing monitor/source evidence is a high-degradation result, but not a high-confidence source attribution.
+- In cross-run summaries, rank evidence strength separately from observed degradation. A severe performance cliff with missing monitor/source evidence is a high-degradation result, but not a high-confidence source attribution.
 
 ## Monitor Triage
 
@@ -210,7 +209,7 @@ Prioritize:
 - `perf.log`, `perf.err`, `perf.data`: cycles, instructions, context switches, task-clock, stalled cycles, and hot kernel symbols. If saved `perf.data` cannot be read or symbols are unresolved, report the limitation.
 - `lock-contention.csv`, `perf-lock.log`: contended lock sites, total wait, average wait, caller, and lock class.
 - `mpstat.json`: system time, iowait, softirq, interrupts, RCU, scheduler activity, and idle collapse.
-- `iostat*.json`, `iostat*.log`, `iostat*.txt`: device utilization, queue depth, await, service time, and throughput.
+- `iostat*.json`, `iostat*.log`, `iostat*.txt`: device utilization, queue depth, await, service time, and performance.
 - Arm SPE captures: memory latency, cache/TLB misses, branch behavior, and load/store source attribution.
 - `bpftrace*`: syscall, tracepoint, kprobe, lock, scheduler, block, or network aggregations. Read script text as part of interpreting the output.
 - Existing linux-perf/performance-patterns artifacts when already present: IPC/cache/branch/context-switch counters, dual-profile baseline-vs-cliff comparisons, `perf c2c` HITM tables, `perf annotate` instruction clusters, and explicit pattern matches or non-matches.
@@ -221,9 +220,9 @@ Use the structure for each benchmark from the template `template-csb-analysis-re
 
 The report may include more detail, but it must answer these questions directly:
 
-- At what execution-unit count does throughput start dropping?
-- Which monitor values rise as throughput falls?
-- Which monitor values fall as throughput falls?
+- At what execution-unit count does performance start dropping?
+- Which monitor values rise as performance falls?
+- Which monitor values fall as performance falls?
 - Which kernel functions/stacks become wider or hotter as execution-unit count increases?
 - Has each hot path changed in the available local kernel history?
 - Where are the detailed per-function kernel-change notes stored?
@@ -290,7 +289,7 @@ python3 -m markdown -x tables -x extra results/<base>_csb-analysis.md > results/
 
 Only create a cross-benchmark summary when requested or when the user asks for "all results." Keep it separate from per-benchmark reports. The summary should rank benchmarks by:
 
-- severity of throughput degradation;
+- severity of performance degradation;
 - clarity of execution-unit inflection point;
 - strength of monitor correlation;
 - strength of perf/flamegraph/lock evidence;
@@ -298,4 +297,4 @@ Only create a cross-benchmark summary when requested or when the user asks for "
 - existence and relevance of locally available kernel-history changes;
 - confidence in the result-analysis hypothesis.
 
-Do not rank source attribution confidence from throughput loss alone.
+Do not rank source attribution confidence from performance loss alone.
