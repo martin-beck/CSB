@@ -33,6 +33,13 @@ Preserve those dimensions in every conclusion. Evidence from one `container_cnt`
 
 ## Core Workflow
 
+Before workflow start, check whether `linux-perf` is available as a skill or local reference under `deps/intel-performance-skills/skills/linux-perf`. If it is missing and network access is permitted or approved, clone the skill bundle:
+
+```bash
+git clone https://github.com/intel/intel-performance-skills.git deps/intel-performance-skills
+```
+
+Use information about monitor availability to distinguish "no evidence" from "no bottleneck."
 For each benchmark/run:
 
 1. Verify result completeness.
@@ -142,16 +149,16 @@ git -C deps/linux remote add torvalds https://git.kernel.org/pub/scm/linux/kerne
 git -C deps/linux fetch --all --tags
 ```
 
-Do not create or require `deps/linux-upstream`. Compare the selected distribution/tested branch in `deps/linux` against `torvalds/master` or `torvalds/main` from the same clone. Record both commit ids with `git -C deps/linux rev-parse --short HEAD` and `git -C deps/linux rev-parse --short torvalds/master` or `torvalds/main`.
+Compare the selected distribution/tested branch in `deps/linux` against `torvalds/main` from the same clone. Record both commit ids with `git -C deps/linux rev-parse --short HEAD` and `git -C deps/linux rev-parse --short torvalds/master` or `torvalds/main`.
 
 7. Apply linux-perf/performance-patterns refinement before choosing a patch direction: classify the bottleneck as CPU-bound, lock/cacheline-bound, scheduler/wakeup-bound, I/O-wait/device-bound, memory-management-bound, or unresolved; then record which named performance patterns match or do not match. If a fresh perf run would resolve the classification or validate a patch hypothesis, try to set `perf_event_paranoid=-1` with sudo, check/remount tracefs for tracepoint events, and run the smallest useful CSB/perf profile at the relevant baseline/peak/cliff points.
 8. Correlate hot symbols/callers to source in the checked-out distribution/tested branch of `deps/linux` with `rg`, `git grep`, and architecture-specific paths. Prefer exact symbol definitions before making patch proposals. Use performance-patterns detail files to choose the correct source structure to inspect, such as lock variables, counters, wait queues, flush queues, shared structs, or hot loops.
 9. For every proposed patch direction or discovered hot kernel path, compare the selected distribution/tested branch in `deps/linux` against Torvalds main in the same clone. Use targeted commands such as `git -C deps/linux log HEAD..torvalds/master -- <path>`, `git -C deps/linux log HEAD..torvalds/main -- <path>`, `git -C deps/linux diff HEAD..torvalds/master -- <path>`, `git -C deps/linux show torvalds/master:<path>`, and symbol searches to identify upstream changes relevant to the hot function, lock, cacheline, syscall, filesystem, network, scheduler, memory-management, or architecture path. Do not treat unrelated churn as an improvement; require a plausible connection to the measured bottleneck and to the linux-perf/performance-patterns classification.
 10. If Torvalds main appears to improve a hot path or subsume a proposed patch, describe what changed upstream, why it may improve the benchmarked scaling behavior, and whether a backport to the selected distribution/tested branch would likely help. Include the expected backport shape: commits to inspect/cherry-pick, files/functions touched, minimal pseudo-diff or adaptation plan, dependencies, conflicts, semantic risks, and CSB rerun matrix. If Torvalds main does not contain a relevant improvement, say so and keep the original patch proposal clearly separate.
-11. Produce one detailed document per complete run unless the user explicitly asks for a cross-run synthesis. Both Markdown result files for a run must start with the same `benchmark_<systemname>` prefix taken from the run filename, and should normally start with the full run basename. For example: `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_analysis.md` and `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_csb-analysis.md`. For every analysis Markdown file, generate an adjacent HTML file with the same stem:
+11. Produce one detailed Markdown document per complete run unless the user explicitly asks for a cross-run synthesis. Both Markdown result files for a run must start with the same `benchmark_<systemname>` prefix taken from the run filename, and should normally start with the full run basename. For example: `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_analysis.md` and `results/benchmark_A2302940388_bm_min_mysql_recvfrom_sendto_0_0_20260609_121620_729848_csb-analysis.md`. Do not generate HTML by default. If the user requests HTML, render the Markdown with Python-Markdown and enable table support:
 
 ```bash
-python3 /etc/codex/skills/csb-analysis/scripts/md_to_html.py results/<analysis-file>.md
+python3 -m markdown -x tables -x extra results/<analysis-file>.md > results/<analysis-file>.html
 ```
 
 For "all results", create independent per-run documents first; then add or update the separate cross-run synthesis, and keep cross-run conclusions explicitly separate from per-run findings.
@@ -159,12 +166,13 @@ For "all results", create independent per-run documents first; then add or updat
 12. The cross-run summary must collect the essential many-core degradation information from all analyzed runs, estimate the potential for kernel scaling improvement, and rank tests by confidence that a proposed kernel-scaling patch or upstream backport would improve large many-core scaling. Treat the ranking as triage: it should combine benchmark degradation, success/latency movement, monitor evidence strength, linux-perf/performance-patterns classification, source-correlation plausibility, and upstream-comparison strength. Do not claim a patch or backport will help from degradation alone.
 13. The cross-run summary and every detailed run report must use local Markdown links for files they reference whenever practical. In particular:
    - Link each run's original result HTML, e.g. `[result html](benchmark_<...>.html)`.
-   - Link each generated detailed analysis HTML from the summary, e.g. `[analysis html](benchmark_<...>_csb-analysis.html)`.
+   - Link each generated detailed analysis Markdown from the summary, e.g. `[analysis markdown](benchmark_<...>_csb-analysis.md)`.
+   - Link generated analysis HTML only when HTML output was requested and the file exists.
    - Link Linux source files referenced in source-correlation tables or notes, using paths relative to the report location, e.g. `[fs/sync.c:180](../deps/linux/fs/sync.c#L180)`.
    - When discussing Torvalds-main improvements, link the checked-out local path in `deps/linux` and name the compared Torvalds ref/commit in text; do not link to `deps/linux-upstream`.
    - Prefer linked paths over plain backticked paths for navigational targets; keep non-file identifiers such as symbols, benchmark names, and execution types in backticks.
 14. When the user asks to prepare kernel patches, create per-run patch-series artifacts instead of editing the benchmark evidence reports in place. For each run directory, create a descriptive folder such as `patch-series-ext4-fsync-flush-coalescing/` or `patch-series-vfs-namei-negative-lookup-cache/`. Put the generated patch file and its safety/implications documentation in that folder, and update a global index such as `results/kernel_patch_preparation_summary.md`.
-15. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing result HTML or analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)`, not the shallower summary/report path.
+15. After generating reports or patch-series documents, run local-link sanity checks. Resolve every Markdown link from the file that contains it; missing original result HTML or optionally generated analysis HTML must be marked as missing rather than linked. Nested patch-series documents need deeper relative paths for kernel source links, e.g. from `results/<run>/patch-series-*/` use `[fs/sync.c:180](../../../deps/linux/fs/sync.c#L180)`, not the shallower summary/report path.
 
 ## Runner Comparison Reports
 
@@ -237,7 +245,7 @@ Use this structure for each benchmark:
 - performance-patterns classification: list matching patterns, explicitly rule out misleading patterns, and connect any match to the candidate kernel resolution strategy.
 - Source correlation: map symbols/callers to `deps/linux` files/functions, explain relevant code paths, and cite the search method.
 - Upstream comparison: map the same hot files/functions from the selected distribution/tested branch in `deps/linux` to the chosen Torvalds ref in the same clone, summarize relevant upstream commits or diffs, and state whether Torvalds main already changes the measured bottleneck path.
-- Navigation links: locally link referenced original result HTML, generated analysis HTML, and Linux source files/line anchors so readers can move directly from summaries to detailed evidence and source.
+- Navigation links: locally link referenced original result HTML, generated analysis Markdown, optional generated analysis HTML when requested, and Linux source files/line anchors so readers can move directly from summaries to detailed evidence and source.
 - Hypothesis: explain the likely bottleneck and confidence level.
 - Patch/backport proposal: state concrete kernel change direction or upstream backport direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
 - Cross-run summary: table of all analyzed runs ranked by many-core degradation, monitor evidence, potential kernel scaling improvement, upstream improvement/backport opportunity, and confidence that a proposed patch or backport would improve large many-core scaling; include short per-run notes and caveats.
@@ -321,7 +329,7 @@ These commands are examples, not mandatory helpers. Adapt them to the actual res
 
 - run identity, benchmark name, and completeness;
 - link to the local patch file;
-- links to the detailed Markdown/HTML report and original result HTML when present;
+- links to the detailed Markdown report, optional generated HTML report when requested, and original result HTML when present;
 - link back to the cross-run summary;
 - source-correlation links to `deps/linux` paths with correct relative paths from the patch-series folder;
 - upstream-comparison notes naming the compared Torvalds ref/commit in `deps/linux`; link source paths through the local `deps/linux` checkout rather than `deps/linux-upstream`;
@@ -385,10 +393,10 @@ git -C deps/linux-upstream log --oneline v6.6..HEAD -- <path>
 git -C deps/linux-upstream log -L :<function_name>:<path> v6.6..HEAD
 ```
 
-Optionally render Markdown to HTML when requested:
+Optionally render Markdown to HTML when requested. Use Python-Markdown with table support so pipe tables render correctly:
 
 ```bash
-python3 -m markdown -x tables results/<base>_csb-analysis.md > results/<base>_csb-analysis.html
+python3 -m markdown -x tables -x extra results/<base>_csb-analysis.md > results/<base>_csb-analysis.html
 ```
 
 ## Cross-Benchmark Summary
