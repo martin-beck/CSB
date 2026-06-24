@@ -46,34 +46,7 @@ Running full benchmarks may require Docker access, `perf`, `sysstat`, sudo-able 
 
 ## Configure A Specific Application
 
-Primary config surface: JSON under `config/`, documented in `doc/bm-config.md`.
-
-Core sections:
-
-- `applications`: builtin target names or external apps.
-- `benchmark_config`: duration, repeats, threads, noise, initial sizes, execution environments, and monitors.
-- `containers`: number of execution units and CPU/core assignment.
-- `plugins`: `pre`, `post`, `cleanup`, or `with` scripts.
-- `plots`: CSV columns and plot types.
-- `nics`: optional NIC/VF assignment for container networking.
-
-List expansion:
-
-```json
-{ "values": [[1], {"min": 2, "max": 16, "step": 2}] }
-```
-
-Use `containers.container_list` for native/container process counts and `benchmark_config.threads` for threads inside each unit. If `container_list` is omitted, CSB computes a range from topology and `core_count`.
-
-Application details:
-
-- Builtin apps default to `build/bench/<name>`.
-- External apps use `path` relative to the CSB root; in containers that root is mounted as `/home`.
-- App/plugin `args` support `{threads}`, `{noise}`, `{duration}`, `{index}`, `{initial_size}`, `{n_units}`, `{homedir}`, `{res_dir}`, and `{host_ip}`.
-- Builtin `operations` values should sum to `1024`.
-- External adapters should emit semicolon-separated `key=value;` fields.
-
-When adapting a config for a new application, copy a nearby config, change only the app, runtime dimensions, plugins/monitors, and plots needed for the benchmark, then validate JSON syntax and paths before running.
+Primary config surface: JSON under `config/`, documented in `doc/bm-config.md`. Refer to this document for any further application specific configuration.
 
 ## Run, Replot, And Inspect
 
