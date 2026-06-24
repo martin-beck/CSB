@@ -5,11 +5,12 @@
 #ifndef SHE_HULK_TIME_MEASUREMENT_H
 #define SHE_HULK_TIME_MEASUREMENT_H
 
-#include <stdint.h>
 #include "compiler.h"
+#include <stdint.h>
 #include <stdio.h>
-#include <time.h>
 #include <sys/resource.h>
+#include <time.h>
+#include <unistd.h>
 
 #define VTIME_MILLISEC_IN_SEC 1000U
 #define VTIME_MICROSEC_IN_SEC (VTIME_MILLISEC_IN_SEC * 1000)

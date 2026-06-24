@@ -50,6 +50,9 @@ class PlotConfig(dict):
         title: Optional[str] = None,
         shape: Optional[str] = None,
         type: PlotType = PlotType.NORMAL,
+        hist_bucket_min: Optional[int] = 0,
+        hist_bucket_max: Optional[int] = 99,
+        hist_bucket_factor: Optional[float] = 1.1,
     ):
         """
         Plot configuration for benchmark results.
@@ -75,6 +78,12 @@ class PlotConfig(dict):
             The shape/type of the plot (e.g., 'lineplot', 'barplot'). If None, defaults based on `type`.
         type: PlotType
             The type of plot to be created, which determines default shape and other behaviors.
+        hist_bucket_min: Optional[int]
+            The minimum value for the first bucket in histogram plots. Default: 0
+        hist_bucket_max: Optional[int]
+            The maximum value for the first bucket in histogram plots. Default: 99
+        hist_bucket_factor: Optional[float]
+            The factor to be used to grow baskets for histogram plots. Default: 1.1
         -
         """
         super().__init__(
@@ -87,6 +96,9 @@ class PlotConfig(dict):
             title=title,
             shape=shape,
             type=type,
+            hist_bucket_min=hist_bucket_min,
+            hist_bucket_max=hist_bucket_max,
+            hist_bucket_factor=hist_bucket_factor,
         )
         self.x = x
         self.y = y
@@ -97,3 +109,6 @@ class PlotConfig(dict):
         self.title = title if title is not None else f"{self.x_lbl} vs. {self.y_lbl}"
         self.type = type
         self.shape = shape if shape is not None else self.DEFAULT_PLOT[self.type]
+        self.hist_bucket_min = hist_bucket_min
+        self.hist_bucket_max = hist_bucket_max
+        self.hist_bucket_factor = hist_bucket_factor

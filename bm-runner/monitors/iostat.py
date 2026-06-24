@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import re
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from pandas import DataFrame
@@ -53,7 +53,7 @@ class IoStat(Monitor):
     def stop(self):
         self.stat.stop()
 
-    def collect_results(self) -> str:
+    def collect_results(self, pids: Optional[list[int]] = None) -> str:
         mean_output = ""
         data = str_to_json(self.stat.read_output())
         if data is not None:

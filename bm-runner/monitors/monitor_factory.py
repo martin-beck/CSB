@@ -7,9 +7,17 @@ from monitors.redis_bench import RedisStats
 from monitors.perf import FlameGraph
 from monitors.iostat import IoStat
 from monitors.sarnet import SarNetStats
+from monitors.bpftrace import BPFTraceStats
 from monitors.monitor import Monitor
 from monitors.perfstat import PerfStat
 from monitors.perflock import PerfLock
+from monitors.irq_softirq import IrqSoftirqStats
+from monitors.numa import NumaStats
+from monitors.pidstat import PidstatStats
+from monitors.psi import PressureStallStats
+from monitors.schedstat import SchedstatStats
+from monitors.slabinfo import SlabinfoStats
+from monitors.vmstat import VmstatStats
 from utils.logger import bm_log, LogType
 import sys
 from config.env_config import EnvUniversalConfig, UniversalConfig
@@ -31,7 +39,7 @@ class DummyMonitor(Monitor):
     def stop(self):
         pass
 
-    def collect_results(self) -> str:
+    def collect_results(self, pids=None) -> str:
         return ""
 
 
@@ -58,6 +66,22 @@ class MonitorFactory:
                 return PerfStat(output_dir=results_dir, args=args)
             case MonitorType.PERF_LOCK:
                 return PerfLock(output_dir=results_dir, args=args)
+            case MonitorType.BPFTRACE:
+                return BPFTraceStats(output_dir=results_dir, args=args)
+            case MonitorType.IRQ_SOFTIRQ:
+                return IrqSoftirqStats(output_dir=results_dir, args=args)
+            case MonitorType.NUMA:
+                return NumaStats(output_dir=results_dir, args=args)
+            case MonitorType.PIDSTAT:
+                return PidstatStats(output_dir=results_dir, args=args)
+            case MonitorType.PSI:
+                return PressureStallStats(output_dir=results_dir, args=args)
+            case MonitorType.SCHEDSTAT:
+                return SchedstatStats(output_dir=results_dir, args=args)
+            case MonitorType.SLABINFO:
+                return SlabinfoStats(output_dir=results_dir, args=args)
+            case MonitorType.VMSTAT:
+                return VmstatStats(output_dir=results_dir, args=args)
             case _:
                 bm_log(f"Unsupported monitor type {monitor_type}", LogType.FATAL)
                 sys.exit(1)

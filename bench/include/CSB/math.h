@@ -6,6 +6,7 @@
 #define SHE_HULK_UTILS_MATH_H
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* We define a few constants to make the linter happy. */

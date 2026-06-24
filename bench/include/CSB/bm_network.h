@@ -5,11 +5,12 @@
 #ifndef BM_NETWORK_H
 #define BM_NETWORK_H
 
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <netinet/in.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <sys/socket.h>
 
 static struct sockaddr_in bm_connect_addr;
 static bool bm_connect_addr_inited;
@@ -48,6 +49,5 @@ parse_net_addr(const char *addr_env, const char *port_env,
         dst->sin_port = htons(port);
     }
 }
-
 
 #endif

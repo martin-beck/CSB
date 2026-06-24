@@ -195,6 +195,7 @@ class Container(ExecutionUnit):
                 detach=True,  # detached mode
                 working_dir="/home",
                 ports=ports,
+                pid_mode="host",
             )
 
             timeout = 20

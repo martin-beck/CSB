@@ -6,6 +6,7 @@ from utils.logger import bm_log, LogType
 from utils.process import BackgroundProcess
 from bm_utils import read_data_frame_from_csv
 import pandas as pd
+from typing import Optional
 
 
 class PerfStat(Monitor):
@@ -46,7 +47,7 @@ class PerfStat(Monitor):
     def stop(self):
         self.stat.stop()
 
-    def collect_results(self) -> str:
+    def collect_results(self, pids: Optional[list[int]] = None) -> str:
         output = ""
 
         if self.stat:

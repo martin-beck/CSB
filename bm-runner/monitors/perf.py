@@ -10,6 +10,7 @@ from bm_utils import resolve_path
 from utils.logger import bm_log, LogType
 from utils.process import BackgroundProcess
 from config.env_config import EnvUniversalConfig, UniversalConfig
+from typing import Optional
 
 
 class FlameGraph(Monitor):
@@ -122,7 +123,7 @@ class FlameGraph(Monitor):
         # Launch perf in the background
         self.perf.start()
 
-    def collect_results(self):
+    def collect_results(self, pids: Optional[list[int]]):
         return ""
 
     def __generate_flamegraph(self, errfile):

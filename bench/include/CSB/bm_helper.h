@@ -5,10 +5,10 @@
 #ifndef BM_HELPER_H
 #define BM_HELPER_H
 
-
+#include "compiler.h"
 #include "rand.h"
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 static inline size_t
 bm_generate_noise_interruptible(size_t max_noise, bool random,

@@ -9,10 +9,11 @@
 #include "macros.h"
 
 #include <assert.h>
-#include <stdint.h>
-#include <string.h>
 #include <regex.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 #define PARAM_VAL_NONE UINT32_MAX
 

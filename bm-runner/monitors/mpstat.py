@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import json
 import pandas as pd
 import matplotlib.pyplot as plt
 from jsonpath_ng import parse
 from monitors.monitor import Monitor
 from utils.logger import bm_log, LogType
 from utils.process import BackgroundProcess
-from bm_utils import str_to_json
+from typing import Optional
 
 
 class SystemStats(Monitor):
@@ -82,9 +83,16 @@ class SystemStats(Monitor):
         ).reset_index()
         return self.transform(df)
 
-    def collect_results(self) -> str:
+    def __read_output(self) -> Optional[dict]:
+        try:
+            return json.loads(self.stat.read_output())
+        except json.JSONDecodeError as e:
+            bm_log(f"Could not read mpstat output as JSON {e}")
+            return None
+
+    def collect_results(self, pids: Optional[list[int]]) -> str:
         if self.stat:
-            data = str_to_json(self.stat.read_output())
+            data = self.__read_output()
             if data:
                 self.dump_plot(data)
                 results = self.get_cpu_load(data)

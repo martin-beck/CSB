@@ -3,6 +3,7 @@
 
 import os
 import pandas as pd
+from typing import Optional
 from monitors.monitor import Monitor
 from utils.logger import bm_log, LogType
 from utils.process import BackgroundProcess
@@ -57,7 +58,7 @@ class PerfLock(Monitor):
             # perf lock record takes longer time to respond
             self.perf_lock.stop(timeout=60)
 
-    def collect_results(self):
+    def collect_results(self, pids: Optional[list[int]] = None):
         output = ""
         if self.__run_lock_contention():
             df = read_data_frame_from_csv(self.perf_contention_csv, names=self.header)

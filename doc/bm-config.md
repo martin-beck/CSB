@@ -122,6 +122,14 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"sar_net"`:  monitors network traffic.
 - `"perf_stat"`:  Runs perf stat.
 - `"perf_lock"`:  Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points.
+- `"bpftrace"`:  Runs configured bpftrace programs and appends parsed histogram/counter summaries.
+- `"irq_softirq"`:  Captures /proc interrupt, softirq, and scheduler event deltas.
+- `"numa"`:  Captures NUMA counter deltas from sysfs.
+- `"pidstat"`:  Runs pidstat and summarizes per-task metrics.
+- `"psi"`:  Captures pressure stall information deltas.
+- `"schedstat"`:  Captures /proc/schedstat deltas.
+- `"slabinfo"`:  Captures slab allocator object deltas.
+- `"vmstat"`:  Captures selected /proc/vmstat deltas.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.

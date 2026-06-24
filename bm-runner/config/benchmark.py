@@ -34,6 +34,14 @@ class MonitorType(str, Enum):
     SAR_NET: monitors network traffic.
     PERF_STAT: Runs perf stat.
     PERF_LOCK: Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points.
+    BPFTRACE: Runs configured bpftrace programs and appends parsed histogram/counter summaries.
+    IRQ_SOFTIRQ: Captures /proc interrupt, softirq, and scheduler event deltas.
+    NUMA: Captures NUMA counter deltas from sysfs.
+    PIDSTAT: Runs pidstat and summarizes per-task metrics.
+    PSI: Captures pressure stall information deltas.
+    SCHEDSTAT: Captures /proc/schedstat deltas.
+    SLABINFO: Captures slab allocator object deltas.
+    VMSTAT: Captures selected /proc/vmstat deltas.
     """
 
     MPSTAT = "mpstat"
@@ -43,6 +51,14 @@ class MonitorType(str, Enum):
     SAR_NET = "sar_net"
     PERF_STAT = "perf_stat"
     PERF_LOCK = "perf_lock"
+    BPFTRACE = "bpftrace"
+    IRQ_SOFTIRQ = "irq_softirq"
+    NUMA = "numa"
+    PIDSTAT = "pidstat"
+    PSI = "psi"
+    SCHEDSTAT = "schedstat"
+    SLABINFO = "slabinfo"
+    VMSTAT = "vmstat"
 
 
 class BenchmarkConfig(dict):
