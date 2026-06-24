@@ -1,23 +1,22 @@
 ---
 name: csb-analysis
-description: "Use when analyzing existing CSB result artifacts in a results/ directory: per-run benchmark folders with matching .json/.html/.csv artifacts, saved monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, bpftrace, and requests to explain process/container scaling degradation or correlate observed hot paths with existing local Linux source trees."
+description: "Use when analyzing existing CSB result artifacts in a results/ directory and producing the kernel patch artifacts that follow from the analysis: per-run benchmark folders with matching .json/.html/.csv artifacts, saved monitor captures from perf, lock contention, Arm SPE, iostat, mpstat, bpftrace, process/container scaling degradation, hot-path source correlation in local Linux trees, and patch/backport preparation."
 ---
 
 # CSB Analysis
 
-Use this skill only for post-run CSB result analysis. The goal is to explain where benchmark throughput starts degrading as execution units increase, which saved monitor signals move with that degradation, which kernel functions become hotter in collected perf/flamegraph evidence, and whether those paths have relevant history in already available local kernel trees.
+Use this skill for post-run CSB result analysis and the kernel patch artifacts that follow from that analysis. The goal is to explain where benchmark throughput starts degrading as execution units increase, which saved monitor signals move with that degradation, which kernel functions become hotter in collected perf/flamegraph evidence, whether those paths have relevant history in already available local kernel trees, and what concrete kernel patch should be produced from the evidence.
 
-This skill is intentionally read-only with respect to benchmark execution, applications, configurations, CSB internals, host tracing state, and kernel trees:
+This skill does not run new experiments or mutate benchmark inputs. It may write analysis reports and kernel patch-preparation artifacts under `results/`, but it remains read-only with respect to benchmark execution, applications, configurations, CSB internals, host tracing state, and kernel source trees:
 
 - Do not run benchmarks or fresh profiling campaigns.
 - Do not modify applications, benchmark configs, generated CSB files, runner code, monitor setup, or CSB framework files.
 - Do not clone, fetch, switch, reset, or otherwise mutate kernel source trees or external skill repositories.
 - Do not change host perf, tracefs, sysctl, cgroup, Docker, NIC, or scheduler state.
-- Do not prepare patch files or patch-series directories.
 - If required artifacts, permissions, source trees, symbols, or monitor captures are missing, report the limitation directly instead of changing the environment to fill the gap.
 - Treat every benchmark as an independent experiment unless the user explicitly requests a cross-benchmark synthesis.
 
-Non-result-analysis material that used to live in this skill has been moved to [out-of-scope-operational-notes.md](out-of-scope-operational-notes.md). Do not follow that file during normal `csb-analysis`; it is retained only as a parking place for future skills or workflows.
+Operational material that is still outside this skill has been moved to [out-of-scope-operational-notes.md](out-of-scope-operational-notes.md). Do not follow that file during normal `csb-analysis`; it is retained only as a parking place for future skills or workflows.
 
 ## Inputs
 
@@ -36,37 +35,23 @@ nb_threads-*/noise-*/initial_size-*/container_cnt-*/execution_type-*/run-*/
 
 Preserve those dimensions in every conclusion. Evidence from one `container_cnt`, `execution_type`, thread count, noise value, or initial size is not evidence for another point unless explicitly aggregated and stated.
 
-## Prerequisits
+## Prerequisites
 
-Before workflow start, check whether `performance-patterns` is available as a skill or local reference under `deps/intel-performance-skills/skills/performance-patterns`. If it is missing and network access is permitted or approved, clone the skill bundle:
+Before workflow start, check whether `performance-patterns` is available as a skill or local reference under `deps/intel-performance-skills/skills/performance-patterns`. If it is missing, record that the performance-patterns classification is unavailable; do not clone external repositories as part of this skill.
 
-```bash
-git clone https://github.com/intel/intel-performance-skills.git deps/intel-performance-skills
-```
+Ensure Linux source exists in `deps/linux`; this single tree is used for both tested-kernel source correlation and upstream comparison. If absent, state that source-code correlation and patch creation are blocked until a suitable local Linux tree is provided.
 
-Ensure Linux source exists in `deps/linux`; this single tree is used for both tested-kernel source correlation and upstream comparison. If absent, clone Torvalds Linux before making source-code claims:
+Identify the distribution and running kernel from the testing machine, using artifacts such as `sys-config/uname.txt`, `sys-config/os-release.txt`, `sys-config/kconfig.txt`, `/proc/version`, or other identifying commands. Prefer an already checked-out source tree or ref that matches the tested kernel. Prefer exact distro source first, then the nearest distro branch for the same kernel series, then Torvalds main only as an explicitly approximate fallback.
 
-```bash
-git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git deps/linux
-```
+Useful source-selection hints when refs are already local:
 
-Identify the distribution and running kernel from the testing machine, using artifacts such as `sys-config/uname.txt`, `sys-config/os-release.txt`, `sys-config/kconfig.txt`, `/proc/version`, or other identifying commands. Add a distribution remote to `deps/linux` when the kernel is distro/vendor patched, fetch all refs from that remote, and check out the branch/tag/commit that most closely matches the running kernel before source correlation. Prefer exact distro source first, then the nearest distro branch for the same kernel series, then Torvalds main only as an explicitly approximate fallback.
-
-Suggested remote selection:
-
-- OpenEuler: add the matching OpenEuler kernel git remote. Branches are named with a `OLK-` prefix. For example `OLK-6.6` for kernel `6.6.0+`.
-- Ubuntu/Debian packaged kernels: add the matching distro kernel git remote when available, otherwise record that package source is required.
-- Fedora/RHEL/CentOS Stream: add the Fedora or CentOS Stream kernel dist-git/kernel-source remote that matches the release.
-- SUSE/openSUSE: add the matching SUSE kernel source remote.
+- OpenEuler: use the matching OpenEuler kernel ref when available. Branches are named with a `OLK-` prefix. For example `OLK-6.6` for kernel `6.6.0+`.
+- Ubuntu/Debian packaged kernels: use the matching distro package source when available, otherwise record that package source is required.
+- Fedora/RHEL/CentOS Stream: use the Fedora or CentOS Stream kernel dist-git/kernel-source ref that matches the release when available.
+- SUSE/openSUSE: use the matching SUSE kernel source ref when available.
 - Custom kernels such as `6.6.0+`: inspect `/proc/version`, kernel build metadata, local source paths, and any node-specific notes before deciding whether the closest branch is a local source tree, distro branch, stable branch, or Torvalds main.
 
-Ensure the same `deps/linux` clone also has a Torvalds remote for upstream comparison. Name it `torvalds` unless that name already exists:
-
-```bash
-git -C deps/linux remote add torvalds https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
-git -C deps/linux fetch --all --tags
-```
-
+For upstream comparison, use an already available Torvalds remote/ref in `deps/linux`. If the needed upstream ref is not local, report that upstream comparison is unavailable or approximate instead of fetching it.
 
 ## Core Workflow
 
@@ -86,13 +71,19 @@ For each benchmark/run:
    - If another throughput column is the only valid signal, state why it was chosen.
    - Track success and latency columns, such as `univ_succ_percent`, `univ_avg`, `univ_min`, and `univ_max`, when present.
 
-4. Find degradation points.
+4. Run CSB analyzer output as part of the analysis when practical.
+   - Use the existing CSB analyzer, `bm-runner/analyze.py` (`csb-analyze` in this skill), against a directory containing only the intended top-level benchmark result CSVs.
+   - Treat analyzer outputs as first-pass aggregate evidence for throughput, success, kernel comparison, and drop points. They do not replace per-run monitor, perf, lock, source, and history analysis.
+   - Keep analyzer artifacts linked from the report when they are created, and record when the analyzer could not be used due to missing dependencies, invalid CSV columns, or unsafe mixed inputs.
+   - Do not use the analyzer to run benchmarks or modify benchmark configurations.
+
+5. Find degradation points.
    - Compute throughput by execution-unit count for each independent dimension group.
    - Identify the peak or plateau, then the first point where throughput drops materially.
    - Use explicit thresholds in the report. A useful default is: first point after the peak where throughput is at least 10% below peak, or where marginal scaling becomes negative and remains negative.
    - Record degradation against both the smallest execution-unit count and the peak/plateau when possible.
 
-5. Correlate saved monitor signals with the degradation.
+6. Correlate saved monitor signals with the degradation.
    - Read monitor files collected at baseline, peak/plateau, first degradation point, and largest execution-unit count.
    - For each numeric monitor series, classify its relation to throughput:
      - `inverse increase`: monitor value rises while throughput falls.
@@ -103,7 +94,7 @@ For each benchmark/run:
    - Prefer concrete ratios or percentage movement over vague words. Example: "`mpstat sys` rises from 18% at 16 units to 61% at 96 units while throughput falls 42% from peak."
    - Do not infer kernel source paths from monitor filenames alone. Use monitor data to form hypotheses, then locate source through symbols, call stacks, tracepoint names, syscall names, lock callers, and kernel-tree search.
 
-6. Extract hot kernel functions from saved artifacts.
+7. Extract hot kernel functions from saved artifacts.
    - Use collected `perf.data`, `perf report` text, `perf script` output, `perf lock`, flamegraph folded stacks, SVG flamegraphs, lock-contention CSVs, bpftrace output, or similar artifacts when present.
    - Compare hot stacks/functions across execution-unit counts, especially baseline, peak/plateau, first degradation point, and largest count.
    - List functions that become wider or consume more samples/cycles as execution-unit count increases.
@@ -111,7 +102,7 @@ For each benchmark/run:
    - Strip compiler suffixes and offsets before source lookup, for example `.isra`, `.constprop`, `.llvm`, and `+0x...`.
    - If saved `perf.data` cannot be read or kernel symbols are unavailable due to permissions, report that limitation; do not change host perf permissions.
 
-7. Map functions to existing local source trees.
+8. Map functions to existing local source trees.
    - Use already available kernel trees, usually `deps/linux`, for source correlation.
    - Search by exact symbol first, then by nearby wrapper/caller names from stacks:
 
@@ -124,7 +115,7 @@ rg -n '\\b<function_name>\\b|\\b<function_name>\\s*\\(' deps/linux
    - Do not keep a permanent mapping table in the skill. The mapping belongs in the analysis report and must cite how it was found.
    - If the local source tree is missing, incomplete, dirty, shallow, or not the tested kernel, state that source correlation is unavailable or approximate.
 
-8. Check relevant upstream or local-history changes only when history is already available.
+9. Check relevant upstream or local-history changes only when history is already available.
    - Use a local Linux git tree with enough history and an appropriate comparison ref, such as `v6.6`, `torvalds/main`, or a checked-out vendor branch.
    - Record the tree path, current commit, dirty status, selected comparison ref, and whether that ref exists locally.
    - For candidate hot functions/paths, inspect relevant commits using local history:
@@ -139,7 +130,7 @@ git -C deps/linux log -L :<function_name>:<path> <base-ref>..HEAD
    - Include only commits plausibly related to the measured hot path, lock, syscall, filesystem, memory-management path, scheduler path, network path, block path, cgroup path, or architecture path. Do not list unrelated churn as evidence of a fix.
    - If no relevant commits are found, state that no relevant local-history change was found for that function/path.
 
-9. Write analysis reports.
+10. Write analysis reports.
    - Produce one detailed Markdown document per complete run unless the user explicitly asks for a cross-run synthesis.
    - Prefer `results/<base>_csb-analysis.md` for the main report.
    - If writing multiple run reports, prefix every analysis Markdown filename with the exact result basename where practical so reports cannot collide.
@@ -149,16 +140,36 @@ git -C deps/linux log -L :<function_name>:<path> <base-ref>..HEAD
 python3 -m markdown -x tables -x extra results/<analysis-file>.md > results/<analysis-file>.html
 ```
 
-10. Maintain local links.
+11. Create kernel patch artifacts after analysis.
+    - Patch creation is a core result of CSB analysis when the evidence supports a concrete kernel change or backport. Produce patch artifacts after the report has identified degradation, monitor correlation, hot functions/stacks, source mapping, and local-history context.
+    - Create per-run patch-series artifacts instead of editing benchmark evidence reports in place. For each run, create a descriptive folder such as `results/<base>_patch-series-ext4-fsync-flush-coalescing/` or `results/<base>_patch-series-vfs-namei-negative-lookup-cache/`.
+    - Put the generated patch file and its safety/implications documentation in that folder. Use a clearly marked RFC patch when the change is hypothesis-driven and not yet validated by a rerun.
+    - Add or update `results/kernel_patch_preparation_summary.md` as a concise index of all patch-series folders, with columns for run, patch series, theme, degradation, confidence, detailed report link, patch link, and original result HTML link. Missing artifacts must be written as `missing`, not linked.
+    - Patch-series documents should include:
+      - run identity, benchmark name, and completeness;
+      - links to the local patch file, detailed Markdown report, optional generated HTML report when requested, and original result HTML when present;
+      - source-correlation links to `deps/linux` paths with correct relative paths from the patch-series folder;
+      - upstream-comparison notes naming the compared Torvalds or vendor ref/commit in `deps/linux`;
+      - why this patch was selected and why it is expected to be profitable;
+      - linux-perf/performance-patterns evidence used to select or reject this patch theme;
+      - what the patch changes at the subsystem/function level;
+      - whether the patch is a novel RFC change, a backport/adaptation of upstream work, or a combination;
+      - safety level and assumptions;
+      - implications for semantics, latency, throughput, memory, fairness, crash consistency, permissions, LSM/fsnotify/accounting, cgroups, and architecture-specific behavior as applicable;
+      - validation checklist and benchmark rerun matrix.
+    - Patch/backport proposals must state concrete kernel change direction or upstream backport direction, affected files/functions, expected benefit, risks, validation plan, and a minimal benchmark rerun matrix.
+    - Before reporting patch preparation as complete, count patch-series directories and patch files for the intended run set, ensure each patch-series directory has `README.md` and `SAFETY_IMPLICATIONS_AND_DESCRIPTION.md`, and check for stale or broken source links.
+
+12. Maintain local links.
     - Link each run's original result HTML when it exists, e.g. `[result html](benchmark_<...>.html)`.
     - Link generated analysis Markdown from summaries, e.g. `[analysis markdown](benchmark_<...>_csb-analysis.md)`.
     - Link generated analysis HTML only when HTML output was requested and the file exists.
     - Link Linux source files referenced in source-correlation tables or notes, using paths relative to the report location, e.g. `[fs/sync.c:180](../deps/linux/fs/sync.c#L180)`.
     - Resolve every Markdown link from the file that contains it; missing original result HTML or optional generated analysis HTML must be marked as `missing`, not linked.
 
-## Runner Comparison Reports
+## CSB Analyzer And Runner Comparison Reports
 
-Use `bm-runner/analyze.py` only as a post-run result summarizer for existing CSB result CSVs. Treat it as a convenience post-processor, not as a replacement for the per-run evidence workflow above, and do not use it to run benchmarks or modify configurations.
+Use `bm-runner/analyze.py` as the CSB analyzer (`csb-analyze`) for existing CSB result CSVs. It is part of the analysis workflow for aggregate throughput and linearity checks, but it is not a replacement for the per-run evidence workflow above and must not be used to run benchmarks or modify configurations.
 
 The script:
 
@@ -216,6 +227,7 @@ The report may include more detail, but it must answer these questions directly:
 - Which kernel functions/stacks become wider or hotter as execution-unit count increases?
 - Has each hot path changed in the available local kernel history?
 - Where are the detailed per-function kernel-change notes stored?
+- Which kernel patch or backport artifact was created from the analysis, or why no patch is justified by the evidence?
 
 ## Practical Commands
 
@@ -225,6 +237,13 @@ Discover complete results:
 
 ```bash
 find results -maxdepth 1 -type f -name '*.csv' -print
+```
+
+Run CSB analyzer on a filtered folder of top-level benchmark CSVs:
+
+```bash
+cd bm-runner
+TMPDIR=/tmp/csb-analyze MPLCONFIGDIR=/tmp/csb-mpl ../venv/bin/python analyze.py <csv-folder> [<csv-folder> ...]
 ```
 
 Inspect CSV columns:
