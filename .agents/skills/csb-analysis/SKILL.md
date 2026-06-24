@@ -115,7 +115,11 @@ For each benchmark/run:
    cgroup, or architecture behavior. Treat history as possibly relevant unless
    it clearly changes the measured path in a matching way.
 
-10. Write reports.
+10. Classify bottleneck.
+    Use evidence to suggest prime source of main performance bottleneck. 
+    A classification might be lock contention or CPU/IO bound.
+
+11. Write reports.
     Produce one Markdown report per complete run unless cross-run synthesis was
     requested. Use `results/<base>_csb-analysis.md` where practical and follow
     `template-csb-analysis-report.md`. Generate HTML only when requested.
