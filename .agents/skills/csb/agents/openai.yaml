@@ -1,6 +1,6 @@
 interface:
   display_name: "CSB Usage"
   short_description: "Configure and run CSB benchmark campaigns"
-  default_prompt: "Use $csb to prepare the environment, adapt JSON configs, configure linux-perf-friendly monitors, run CSB benchmarks, replot results, or refresh ordinary benchmark configs."
+  default_prompt: "Use $csb to prepare the environment, configure linux-perf-friendly monitors, run CSB benchmarks, replot results."
 policy:
   allow_implicit_invocation: true
