@@ -8,19 +8,19 @@
 - host/architecture:
 - result artifacts:
 
-## Throughput Degradation
-In benchmark `<name>` we observe that throughput starts dropping when `<execution-unit>` is >= `<Y>`.
+## Performance Degradation
+In benchmark `<name>` we observe that performance starts degradating when `<execution-unit>` is >= `<Y>`.
 
-| execution units | throughput | vs baseline | vs peak | success | latency | notes |
+| execution units | <prime-metric> | vs baseline | vs peak | success | latency | notes |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 
 ## Monitor Correlation
-Monitor values that inversely increase as throughput drops:
+Monitor values that inversely increase as performance degradates:
 
 | monitor | baseline | peak | degradation point | largest count | relation | interpretation |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
 
-Monitor values that directly decrease as throughput drops:
+Monitor values that directly decrease as performance degradates:
 
 | monitor | baseline | peak | degradation point | largest count | relation | interpretation |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
