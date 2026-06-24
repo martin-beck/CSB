@@ -1,0 +1,6 @@
+interface:
+  display_name: "CSB Refine"
+  short_description: "Refine CSB kernel bottlenecks, validate evidence, and draft RFC kernel patches"
+  default_prompt: "Use $csb-refine to run a CSB benchmark, analyze kernel bottleneck hypotheses, design targeted temporary config and monitor adaptations with expected signals, rerun focused perf-backed validation points, create and object-build-test an RFC-style kernel patch for the most likely optimization, and write concise plus detailed refined reports with patch safety notes."
+policy:
+  allow_implicit_invocation: true
