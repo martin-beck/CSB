@@ -1,10 +1,6 @@
 ---
 name: csb-refine
-<<<<<<< Updated upstream
-description: "Use when a CSB benchmark needs an iterative kernel-performance refinement loop: run or rerun CSB, collect perf/monitor evidence, analyze bottlenecks with csb-analysis plus linux-perf and performance-patterns, adapt temporary benchmark configs for runtime, instance counts, native/container mode, monitors, perf/tracefs settings, rerun focused validation points, create and object-build-test an RFC-style kernel patch for the most likely optimization, and produce concise and detailed refined reports."
-=======
 description: "Use when a CSB benchmark needs an iterative kernel-performance refinement loop: run or rerun CSB, collect perf/all-available-monitor evidence, analyze bottlenecks with csb-analysis plus linux-perf and performance-patterns, adapt temporary benchmark configs for runtime, instance counts, native/container mode, monitors, perf/tracefs settings, bpftrace probes, temporary host-stat monitors, and continue refined runs without self-imposed continuation stops until either a clear many-core kernel data-structure congestion signal emerges or multiple thorough runs confidently rule out kernel-code scalability issues. Create and object-build-test an RFC-style kernel patch for the most likely optimization when a kernel-side signal is found, and produce concise and detailed refined reports."
->>>>>>> Stashed changes
 ---
 
 # CSB Refine
@@ -22,8 +18,6 @@ Use these skills in order as needed:
 
 If `linux-perf` or `performance-patterns` is not available but `deps/intel-performance-skills/skills/<skill>/SKILL.md` exists, read the local skill files. If the local tree is missing and network access is approved, clone `https://github.com/intel/intel-performance-skills.git` into `deps/intel-performance-skills`.
 
-<<<<<<< Updated upstream
-=======
 ## Persistence
 
 - From the first start of a refinement task, continue through the full workflow until all required runs, analyses, reports, patch/deferred-patch artifacts, and validation steps are finished.
@@ -40,7 +34,6 @@ If `linux-perf` or `performance-patterns` is not available but `deps/intel-perfo
 - Negative conclusions require stronger evidence than positive leads: include low-overhead scaling shape, at least one high-detail diagnostic run at the highest practical pressure point, monitor-overhead checks, and source-path/perf evidence showing that hot time is not accumulating in scalable kernel data structures.
 - If a run does not create enough parallel pressure on kernel paths, increase process/container/thread counts, reduce nonessential monitor overhead, adjust duration, or vary benchmark arguments before concluding that there is no many-core kernel bottleneck.
 
->>>>>>> Stashed changes
 ## Refinement Loop
 
 For each requested benchmark or initial config:
@@ -72,15 +65,12 @@ For each requested benchmark or initial config:
      - `execution_type`: include native and/or container only when relevant to the hypothesis.
      - `threads`, `noise`, `initial_size`, CPU pinning, and cgroup/container settings: keep constant unless the hypothesis requires varying them.
      - monitors: enable only those that answer the hypothesis; remove broad or expensive monitors when they obscure the targeted signal.
-<<<<<<< Updated upstream
-=======
    - If system CPU utilization is too low to expose kernel contention, increase load before concluding there is no bottleneck:
      - add larger native-process or container counts, including counts above the physical-core count when memory permits;
      - keep a few points below, at, and above the physical-core boundary so the report can separate kernel bottleneck behavior from the expected total-throughput shape change after cores saturate;
      - for many-core investigations, include counts representative of hundreds of cores when hardware permits, and use heavier oversubscription only as an experimental stressor whose expected scheduling/throughput degradation is labeled separately from kernel congestion;
      - prefer increasing independent processes/containers over changing benchmark semantics unless the hypothesis specifically requires thread-count variation.
    - For every scaled-load config, estimate and monitor total memory use before and during the run. Use cgroup memory counters, `/proc/meminfo`, PSI, `free`, `smem`, or another host-appropriate signal. Reduce process/container counts, duration, initial size, or monitor set if projected or observed memory use approaches the system limit; avoiding OS shutdown or OOM side effects takes priority over completing a point.
->>>>>>> Stashed changes
    - When the first run is too broad or noisy, narrow the next config so the result clearly separates "hypothesis true" from "hypothesis false". Examples: use only baseline/peak/cliff counts for `perf c2c`; only cliff points for scheduler tracepoints; adjacent counts around a throughput cliff for lock contention; native-vs-container paired points when runtime overhead is suspected.
    - Prefer focused reruns over broad sweeps once an inflection is known.
 
@@ -107,14 +97,10 @@ For each requested benchmark or initial config:
    - If the new evidence is still too diffuse, do not just repeat the same run. Propose the next sharper config/monitor change or explain why no CSB-accessible configuration can isolate the bottleneck further.
 
 6. **Iterate**
-<<<<<<< Updated upstream
-   - For each confirmed or still-plausible hypothesis, refine the config again to close the largest remaining evidence gap.
-=======
    - For each confirmed or still-plausible hypothesis, refine the config again to close the largest remaining evidence gap. Continue with further refined runs until a clear signal for a kernel data-structure bottleneck emerges, the hypothesis is ruled out, or a concrete blocker prevents better evidence.
    - A clear signal normally requires the same dimension change to align across benchmark behavior, system CPU or kernel-time pressure, and at least one targeted monitor/source-path signal such as lock wait, cache-line sharing, refcount/atomic pressure, RCU/kernfs/cgroup traversal, rstat flush activity, slab/page-cache activity, syscall latency, or a hot kernel symbol tied to the suspected data structure.
    - If system CPU utilization remains low after a focused run, do not stop at a weak negative result. Increase process/container counts, reduce monitor overhead, or adjust benchmark arguments to put enough parallel pressure on the kernel path, while preserving memory headroom.
    - For many-core tasks, keep iterating until the evidence is strong enough for one of the two final outcomes in "Many-Core Burden Of Proof." A merely smooth curve at low or moderate core counts is not enough to rule out many-core kernel scalability issues.
->>>>>>> Stashed changes
    - Stop iterating on a hypothesis when one of these is true:
      - the required evidence has been collected for benchmark behavior, monitor signal, source path, and pattern classification;
      - the hypothesis is contradicted by multiple focused reruns that reach sufficient many-core or oversubscribed pressure and use different evidence channels;
@@ -165,15 +151,28 @@ For each requested benchmark or initial config:
 - Record rejected adaptations too, especially monitors that would be ideal but are unavailable due to kernel config, tracefs/perf permission, hardware support, excessive overhead, or missing CSB monitor plumbing.
 - Record host state in each refinement report: perf paranoia, tracefs status, monitor availability, sudo limitations, kernel/source tree commits, and any dirty source trees used for correlation.
 
+## Refresh Configs Or Generated Headers
+
+For ordinary CSB configs, edit JSON under `config/` and rerun/replot with the commands above.
+
+For syzkaller-generated headers/configs under `bench/targets/<group>/syz` and `config/<group>`, use `csb-syzkaller`; do not manually edit generated files unless the user explicitly wants a temporary experiment.
+
+## Usage Validation
+
+For config-only changes:
+
+```bash
+python3 -m json.tool config/<file>.json >/dev/null
+```
+
+For real validation, run a short/small config first: one repeat, low duration, one or two execution-unit counts, and monitors disabled if you only need application wiring.
+
 ## Evidence Rules
 
 - A severe scaling drop is not enough. Require benchmark inflection plus a matching monitor signal plus plausible kernel source path before raising confidence.
-<<<<<<< Updated upstream
-=======
 - The main target is kernel data-structure bottlenecks. Prefer evidence that points to a contended or inefficient data structure, traversal, accounting path, reference count, lock, cache line, rbtree/list/hash/radix/xarray use, cgroup/kernfs hierarchy, slab/page-cache structure, or similar kernel object. If evidence points instead to device latency, benchmark userspace, or monitor overhead, say so and keep refining or rule out the data-structure hypothesis.
 - For many-core scalability, distinguish three things explicitly: expected saturation/oversubscription degradation, userspace or device limits, and kernel data-structure congestion. Only the last justifies kernel optimization work.
 - A confident "no many-core kernel scalability issue" conclusion requires converging negative evidence across multiple run shapes and monitor channels, not just absence of one hot symbol or one flat/clean result.
->>>>>>> Stashed changes
 - A patch proposal is not justified by benchmark shape alone. It must cite the refined monitor signal and kernel source path it is intended to improve.
 - A refinement is incomplete if it only reports "reran with more monitors" without explaining which configuration changes made the hypothesis easier to prove or disprove.
 - Prefer monitor evidence that moves monotonically or discontinuously with the suspected cliff: lock wait, HITM, context switches, tracepoint counts, syscall latency, page faults, reclaim, block latency, rstat flush count/time, or hot-symbol share should change at the same dimension where benchmark behavior changes.
@@ -193,12 +192,9 @@ Both reports must include configuration-adaptation content:
 
 - Summary report: a compact "Refinement Adaptations" table with hypothesis, changed config fields, added/removed monitors, expected signal, observed signal, and conclusion.
 - Detailed report: one subsection per iteration containing the adaptation plan before the run, the exact temporary config path, the diff or field-level changes from the previous/original config, monitor additions/removals and their purpose, expected-vs-observed evidence, and the next adaptation decision.
-<<<<<<< Updated upstream
-=======
 - Detailed report: include a "Monitor Decision Log" per hypothesis listing all available CSB monitors considered, bpftrace programs reused/adapted/created, non-CSB kernel statistics queried, temporary monitor scripts or commands, missing software and any local installs, and why each collected signal was sufficient or insufficient.
 - Detailed report: include a "Load, CPU, and Memory Guardrails" subsection for each scaled run with physical-core count, selected process/container counts, whether counts exceed physical cores, expected throughput-shape implications, observed system CPU/kernel time, memory limit, peak memory, and any monitor or argument changes made to avoid overhead or OOM risk.
 - Detailed report: for many-core tasks, include a "Many-Core Conclusion" subsection stating whether the final result is a kernel-side congestion signal or a confident negative finding, the highest physical-core-equivalent and oversubscribed pressure tested, which evidence channels agree, and how natural oversubscription degradation was separated from kernel data-structure bottlenecks.
->>>>>>> Stashed changes
 - If a useful adaptation was not run, list it under "Proposed But Not Collected" with the blocking reason and the exact monitor/config change that would be needed.
 - When the workflow spans several related benchmarks, add a cross-benchmark adaptation matrix showing which single-purpose runs explain which part of the aggregate benchmark and which config/monitor changes isolated that mechanism.
 
