@@ -1,6 +1,6 @@
 ---
 name: csb-refine
-description: "Use when a CSB benchmark needs an iterative kernel-performance refinement loop: run or rerun CSB, collect perf/all-available-monitor evidence, analyze bottlenecks with csb-analysis plus linux-perf and performance-patterns, adapt temporary benchmark configs for runtime, instance counts, native/container mode, monitors, perf/tracefs settings, bpftrace probes, temporary host-stat monitors, and continue refined runs without self-imposed continuation stops until either a clear many-core kernel data-structure congestion signal emerges or multiple thorough runs confidently rule out kernel-code scalability issues. Create and object-build-test an RFC-style kernel patch for the most likely optimization when a kernel-side signal is found, and produce concise and detailed refined reports."
+description: "Use when a CSB benchmark needs an iterative kernel-performance refinement loop: run or rerun CSB, collect perf/all-available-monitor evidence, analyze bottlenecks with csb-analysis plus linux-perf and performance-patterns, adapt temporary benchmark configs for runtime, instance counts, native/container mode, monitors, perf/tracefs settings, bpftrace probes, temporary host-stat monitors, and continue refined runs without self-imposed continuation stops until either a clear many-core kernel data-structure congestion signal emerges or multiple thorough runs confidently rule out kernel-code scalability issues. For SSH/remote benchmark hosts, use csb-remote alongside this skill. Create and object-build-test an RFC-style kernel patch for the most likely optimization when a kernel-side signal is found, and produce concise and detailed refined reports."
 ---
 
 # CSB Refine
@@ -15,8 +15,11 @@ Use these skills in order as needed:
 2. `csb-analysis`: for complete-run detection, per-run reports, cross-run summaries, source correlation, upstream comparison, patch/backport direction, and link checks.
 3. `linux-perf`: for perf permission setup, Flow D-style scaling, perf stat/report/annotate/c2c/tracepoint collection, and dual-profile reasoning.
 4. `performance-patterns`: for deciding which named patterns match or do not match, and for reading the relevant pattern detail files before suggesting fixes.
+5. `csb-remote`: when benchmark execution, analysis reruns, monitor collection, dependency installation, source checkout, or object-build testing happens on one or more SSH remote hosts.
 
 If `linux-perf` or `performance-patterns` is not available but `deps/intel-performance-skills/skills/<skill>/SKILL.md` exists, read the local skill files. If the local tree is missing and network access is approved, clone `https://github.com/intel/intel-performance-skills.git` into `deps/intel-performance-skills`.
+
+For remote refinement, the controller host supplies the skills and orchestration, but every benchmark sweep, cleanup, monitor run, permission change, package install, source checkout/update, analysis command that depends on remote artifacts, and kernel object build must execute on the remote. Copy final reports, configs, generated bpftrace programs, monitor artifacts, logs, and patches back using the layout in `csb-remote`.
 
 ## Persistence
 
@@ -43,13 +46,25 @@ For each requested benchmark or initial config:
    - Otherwise run CSB using `csb`, with normal result siblings `<run>/`, `<run>.json`, `<run>.html`, and `<run>.csv`.
    - Before perf-backed runs, try to set `perf_event_paranoid=-1` and check/remount tracefs as described in `csb`/`csb-analysis`. If blocked, record the exact limitation.
 
-2. **First analysis**
+2. **Clean between CSB sweeps**
+   - After every CSB benchmark sweep, and before starting any new CSB sweep, perform an explicit cleanup pass so the next run starts from a relatively clean system state.
+   - Clean only stale artifacts that belong to the previous CSB/refinement sweep. Preserve completed result directories, copied configs, reports, source changes, and unrelated user work unless the user explicitly asks to remove them.
+   - Check and remove leftover workload processes, runtime/container state, monitor processes, temporary monitor output, start-barrier files, lock files, and scratch directories that can affect the next run. Typical examples include:
+     - benchmark/application processes such as stale native workers, external benchmark helpers, runtime children, or aborted container lifecycle processes;
+     - container runtime state for the benchmark namespace, such as stopped or half-deleted `runc`/`youki`/Docker containers with the benchmark's name prefix;
+     - monitor processes such as `perf`, `perf lock`, `bpftrace`, `mpstat`, `iostat`, temporary shell monitors, and their oversized or partial temp files;
+     - CSB barrier or scratch files such as `build/bench/start`, per-run app stdout/stderr leftovers, temporary config copies, and temporary result staging directories not meant to be kept.
+   - Prefer benchmark-specific cleanup commands over broad destructive cleanup. When a benchmark has its own cleanup script or runtime delete command, use that first; only remove runtime directories directly when the runtime cannot clean stale state and the path clearly belongs to the interrupted CSB sweep.
+   - Re-check after cleanup that no matching stale processes or runtime entries remain. If cleanup cannot fully complete, record the remaining state and decide whether the next sweep would be contaminated before running it.
+   - Include the cleanup command summary and any leftovers in the detailed report's iteration log.
+
+3. **First analysis**
    - Run `csb-analysis` on the complete result.
    - Extract every plausible kernel bottleneck hypothesis from the report: subsystem, benchmark dimensions, inflection point, hot symbols, monitor gaps, linux-perf classification, performance-pattern match/non-match, confidence, and missing evidence.
    - For each hypothesis, state the exact evidence gap that prevents a sharper conclusion. Prefer gaps that can be closed by changing the CSB configuration or monitor set, such as missing cliff-adjacent counts, too-short runtime, missing lock/HITM/tracepoint data, mixed native/container effects, missing CPU isolation, or monitor overhead hiding the signal.
    - Keep hypotheses separate. Do not merge native/container or different instance/thread/noise/initial-size dimensions unless the evidence supports it.
 
-3. **Design a temporary focused config and expected signal**
+4. **Design a temporary focused config and expected signal**
    - Copy the original config to a temporary refinement config under a clearly named scratch path such as `config/refine/` or a user-specified group. Do not overwrite the original config.
    - Treat configuration adaptation as a primary output of the refinement, not a mechanical rerun. Before running, write a short adaptation plan for each hypothesis with:
      - hypothesis being tested;
@@ -74,7 +89,7 @@ For each requested benchmark or initial config:
    - When the first run is too broad or noisy, narrow the next config so the result clearly separates "hypothesis true" from "hypothesis false". Examples: use only baseline/peak/cliff counts for `perf c2c`; only cliff points for scheduler tracepoints; adjacent counts around a throughput cliff for lock contention; native-vs-container paired points when runtime overhead is suspected.
    - Prefer focused reruns over broad sweeps once an inflection is known.
 
-4. **Monitor selection by hypothesis**
+5. **Monitor selection by hypothesis**
    - fsync/writeback/block: perf call graphs, `mpstat`, `iostat`, block tracepoints, flush/writeback/journal tracepoints or bpftrace if available.
    - VFS path/dentry/inode: perf call graphs, syscall tracepoints, source-resolvable kernel symbols, optional LSM/fsnotify/refcount tracepoints when suspected.
    - read/write iterator/copy: perf report/annotate, hardware counters, syscall tracepoints, copy/uaccess/filemap/ext4 symbols.
@@ -86,8 +101,9 @@ For each requested benchmark or initial config:
    - cgroup rstat/accounting: `cgroup_rstat_flush`/`cgroup_rstat_lock` evidence via perf, lock contention, tracepoints or kprobes, plus stats-reader workload dimensions that vary tree breadth/depth and dirtying rate.
    - controller-specific cgroup limits: pair controller counters with syscall/scheduler evidence. For memory use `memory.events`, reclaim/fault data, and memcg symbols; for pids use fork/clone/sched/process counters and pids events.
 
-5. **Rerun and re-analyze**
+6. **Rerun and re-analyze**
    - Run the temporary config.
+   - Before this run, perform the "Clean between CSB sweeps" step if any prior sweep has run in the current refinement session.
    - Generate fresh per-run and cross-run analysis.
    - Compare new evidence against the previous hypothesis:
      - confirmed: benchmark inflection, monitor signal, source path, and pattern classification align;
@@ -96,7 +112,7 @@ For each requested benchmark or initial config:
      - split: multiple bottlenecks are visible and need separate focused configs.
    - If the new evidence is still too diffuse, do not just repeat the same run. Propose the next sharper config/monitor change or explain why no CSB-accessible configuration can isolate the bottleneck further.
 
-6. **Iterate**
+7. **Iterate**
    - For each confirmed or still-plausible hypothesis, refine the config again to close the largest remaining evidence gap. Continue with further refined runs until a clear signal for a kernel data-structure bottleneck emerges, the hypothesis is ruled out, or a concrete blocker prevents better evidence.
    - A clear signal normally requires the same dimension change to align across benchmark behavior, system CPU or kernel-time pressure, and at least one targeted monitor/source-path signal such as lock wait, cache-line sharing, refcount/atomic pressure, RCU/kernfs/cgroup traversal, rstat flush activity, slab/page-cache activity, syscall latency, or a hot kernel symbol tied to the suspected data structure.
    - If system CPU utilization remains low after a focused run, do not stop at a weak negative result. Increase process/container counts, reduce monitor overhead, or adjust benchmark arguments to put enough parallel pressure on the kernel path, while preserving memory headroom.
@@ -108,11 +124,11 @@ For each requested benchmark or initial config:
      - additional reruns would repeat the same evidence without changing confidence;
      - the user-specified time/run budget is exhausted.
 
-7. **Continue across hypotheses**
+8. **Continue across hypotheses**
    - Process every plausible kernel bottleneck extracted from the benchmark.
    - If fixing or validating one hypothesis exposes a new bottleneck in later reruns, add it to the queue and mark its source run.
 
-8. **Create an RFC kernel patch after successful refinement**
+9. **Create an RFC kernel patch after successful refinement**
    - After at least one kernel bottleneck is confirmed or strongly supported, create a compilable Linux kernel patch that would most likely improve the measured performance. Treat this as part of a successful refine result, not an optional follow-up.
    - Use the source tree identified by the analysis, preferring the benchmarked tree such as `deps/linux` when present. If a separate upstream comparison tree such as `deps/linux-upstream` was used, cite it for provenance but patch the intended target tree.
    - Keep the patch conservative and evidence-linked. Optimize the smallest kernel path that matches the refined evidence; avoid broad subsystem rewrites, speculative algorithm swaps, or pattern fixes that were not supported by monitor data.
@@ -125,7 +141,7 @@ For each requested benchmark or initial config:
    - If the best patch direction is a backport of an existing upstream commit, create the backport-style patch against the target tree and cite the upstream commit in the commit message. If a direct backport does not apply, produce the minimal adapted RFC patch and explain the adaptation.
    - If no responsible patch can be produced from the evidence, write a `patch-deferred.md` support document instead of inventing code. It must name the missing evidence or unsafe semantic ambiguity and the exact additional monitor/source inspection needed.
 
-9. **Apply and object-build-test the patch temporarily**
+10. **Apply and object-build-test the patch temporarily**
    - Temporarily apply the RFC patch to the target kernel tree, preserving unrelated user changes. Prefer `git apply --check` first, then apply the patch.
    - Compile the affected object or narrow subsystem target rather than a full kernel unless the user requested a full build. Examples: `make M=<subdir> <file>.o`, `make kernel/cgroup/cgroup.o`, or the closest valid target for the edited file.
    - If the object build fails, fix the patch and retest when the failure is patch-related. If the failure is environmental or pre-existing, record the exact command and error.
@@ -134,7 +150,7 @@ For each requested benchmark or initial config:
      - otherwise reverse only the patch changes you made, leaving unrelated dirty files untouched, and keep the patch file as the deliverable.
    - Record the apply command, build command, build result, and tree state in the detailed report.
 
-10. **Patch support documents**
+11. **Patch support documents**
    - Alongside the patch, write concise support documentation for reviewer and user context:
      - `patch-rationale.md`: evidence-to-code mapping, why this patch is the most likely performance improvement, expected benchmark/monitor movement, and follow-up validation run.
      - `patch-safety.md`: locking/lifetime/RCU/refcount/memory-ordering/API compatibility analysis, why correctness should be preserved, and what risks remain.
