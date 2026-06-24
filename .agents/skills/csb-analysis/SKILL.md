@@ -84,10 +84,10 @@ For each benchmark/run:
    tree containing monitor CSVs. Record dependency or input failures directly.
 
 5. Find degradation points.
-   Compute performance by execution-unit count for each independent dimension
-   group. Identify the peak or plateau and the first material drop. State the
-   threshold used; a useful default is at least 10% below peak or sustained
-   negative marginal scaling.
+   Compute performance by comparing each independent dimension group against 
+   execution-unit count. Identify the peak or plateau and the first material
+   drop. State the threshold used; a useful default is at least 10% below peak
+   or sustained negative marginal scaling.
 
 6. Correlate saved monitor signals.
    Compare baseline, peak/plateau, first degradation point, and largest count
