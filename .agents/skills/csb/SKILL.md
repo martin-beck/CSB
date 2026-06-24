@@ -158,18 +158,3 @@ perf list 'block:*' 'sched:*' 'syscalls:*' >/tmp/csb-perf-tracepoint-list.txt
 
 If the list is empty or perf reports tracefs permission errors, fix tracefs permissions or document the limitation in the run notes.
 
-## Refresh Configs Or Generated Headers
-
-For ordinary CSB configs, edit JSON under `config/` and rerun/replot with the commands above.
-
-For syzkaller-generated headers/configs under `bench/targets/<group>/syz` and `config/<group>`, use `csb-syzkaller`; do not manually edit generated files unless the user explicitly wants a temporary experiment.
-
-## Usage Validation
-
-For config-only changes:
-
-```bash
-python3 -m json.tool config/<file>.json >/dev/null
-```
-
-For real validation, run a short/small config first: one repeat, low duration, one or two execution-unit counts, and monitors disabled if you only need application wiring.
