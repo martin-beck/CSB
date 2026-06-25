@@ -1,6 +1,6 @@
 interface:
   display_name: "CSB Remote"
   short_description: "Run CSB workflows on SSH benchmark hosts"
-  default_prompt: "Use $csb-remote when CSB benchmarks, analysis, refinement, monitor collection, package setup, kernel source checkout, builds, or validation should run on one or more SSH remote machines while this host acts as the controller, then copy results and reports back into remote-specific directories."
+  default_prompt: "Use $csb-remote when CSB benchmarks, analysis, refinement, monitor collection, setup, source checkout, builds, or validation should run on SSH hosts while this machine acts as controller. Run host-dependent steps remotely and copy results, reports, configs, logs, and artifacts back into remote-specific directories."
 policy:
   allow_implicit_invocation: true
