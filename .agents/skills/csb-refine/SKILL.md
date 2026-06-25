@@ -11,7 +11,7 @@ Iteratively refine CSB benchmark evidence until each plausible kernel bottleneck
 
 Use these skills in order as needed:
 
-1. `csb`: for config selection/adaptation, temporary run configs, monitor setup, perf/tracefs host prep, and running/replotting CSB.
+1. `csb`: for config selection, temporary run configs, monitor setup, perf/tracefs host prep, and running/replotting CSB.
 2. `csb-analysis`: for complete-run detection, per-run reports, cross-run summaries, source correlation, upstream comparison, patch/backport direction, and link checks.
 3. `linux-perf`: for perf permission setup, Flow D-style scaling, perf stat/report/annotate/c2c/tracepoint collection, and dual-profile reasoning.
 4. `performance-patterns`: for deciding which named patterns match or do not match, and for reading the relevant pattern detail files before suggesting fixes.
