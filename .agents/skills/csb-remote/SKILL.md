@@ -56,7 +56,7 @@ Use SSH from the controller and execute from the remote CSB checkout:
 ssh <remote> 'cd /path/to/csb && CSB_RESULTS_GROUP=<remote>_<group> scripts/run-single.sh config/<file>.json'
 ```
 
-For long runs, prefer a remote `tmux` or `systemd-run` session:
+Always use a remote `tmux` or `systemd-run` session:
 
 ```bash
 ssh <remote> 'cd /path/to/csb && tmux new-session -d -s csb-remote_<remote>_<name> "CSB_RESULTS_GROUP=<group> scripts/run-single.sh config/<file>.json 2>&1 | tee results/<group>.log"'
