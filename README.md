@@ -18,6 +18,8 @@ If you are too eager and feeling adventurous run `./run.sh` and see what happens
 ## Framework Overview
 ```
 CSB
+├── .agents             # AI agents information
+│   └── skills          # skills for efficiently using CSB from AI agents
 ├── bench               # builtin C benchmarks
 │   └── targets         # header files that implement the benchmarking skeleton, each header is a benchmark
 ├── bm-generator        # benchmark generation tool(s) based on syzkaller & tmplr
@@ -44,6 +46,17 @@ The auto-generated benchmarks in this repository are generated for
 generate benchmarks for a different architecture then you
 can run [bm-generator][] on the target architecture. At
 the moment, the tooling in [bm-generator][] is experimental.
+
+## AI Agent skills.
+
+CSB includes a number of skills that can be used by AI agents to
+efficiently run the benchmarks and analyse their results. Please
+check agents [documentation](doc/agents.md) for more information.
+
+Running container scalability experiments with help of agents can be
+as simple as: "Use $csb-remote to run experiment
+config/rocksdb/bm_min_rocks_write_fcntl_5_0.json on host
+<remote-server>, and analyze the results."
 
 ## Releases
 
