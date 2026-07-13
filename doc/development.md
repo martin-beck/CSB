@@ -20,7 +20,9 @@ scripts referenced from JSON configs live under `scripts/plugins/`.
 
 `deps/syzkaller` is a nested repository/submodule. Check its status and history
 with `git -C deps/syzkaller ...` and keep its changes separate from the CSB root
-repository.
+repository. Agent-assisted development inside that subproject should use the
+project-local syzkaller skills and guidance in `deps/syzkaller/.agents/` and
+`deps/syzkaller/GEMINI.md`.
 
 ## Development Commands
 

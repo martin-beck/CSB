@@ -51,6 +51,9 @@ The following skills are available:
     config/rocksdb/bm_min_rocks_write_fcntl_5_0.json on host
     remote-server, and analyze the results."
 
+`deps/syzkaller` is a separate nested project. Development inside that
+subproject should use the skills and agent guidance shipped with that project.
+
 ## Demo
 
 As a demo, you can run the following command:
