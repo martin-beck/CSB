@@ -197,9 +197,8 @@ def add_to_linearity_summary(df, bm, env, idx, tolerance=0.1) -> str:
 
 
 def generate_comparison_reports(df):
-    benchmarks = df[BENCHMARK_FIELD].unique()
-    envs = df[EXEC_ENV_FIELD].unique()
-    benchmarks.sort()
+    benchmarks = sorted(df[BENCHMARK_FIELD].dropna().unique())
+    envs = sorted(df[EXEC_ENV_FIELD].dropna().unique())
     df[COMPARISON_FIELD] = df[COMPARISON_FIELD].map(lambda x: f"{to_pretty_name(x)}")
     Linearity_md = "# Linearity Summary\n"
     idx = 1
@@ -207,6 +206,8 @@ def generate_comparison_reports(df):
     for bm in benchmarks:
         for env in envs:
             bm_df = df[(df[BENCHMARK_FIELD] == bm) & (df[EXEC_ENV_FIELD] == env)]
+            if bm_df.empty:
+                continue
             nice_env = to_pretty_name(env)
             generate_patch_measurement(bm_df, bm, env=nice_env)
             generate_comparison_plot(
