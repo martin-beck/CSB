@@ -113,6 +113,11 @@ Alternatively:
 strace -o strace.log -a 1 -s 65500 -v -xx -f -Xraw --raw=wait4 <app-binary>
 ```
 
+Real, refreshable exec-family traces are under
+`bm-generator/testdata/exec/`. They cover the libc exec wrappers, direct
+`execve`/`execveat`, concurrent recording, and a combined trace. See the local
+README for the libc-to-kernel mapping limitations.
+
 The scripts should be run in the same order they are enumerated:
 
 ```bash
@@ -232,7 +237,7 @@ dropped during [syzlang][] program generation.
 |Syscall|Reason|
 |---|---|
 |clone|Multithreaded tests are not supported|
-|execve|Replaces actual benchmark program|
+|execve, execveat|Supported as bounded fork/exec/wait lifecycles against `/bin/true`; pathname and `AT_EMPTY_PATH` forms remain distinct. The root trace's initial successful exec is treated as recorder bootstrap and skipped.|
 |arch_prctl|No enabled syzkaller target description in the current generator target|
 |mmap, mprotect, msync, mremap, munmap, madvise|Supported on generated scratch VMAs with bounded length and sanitized flags; `munmap` and `mremap` get setup mappings|
 |futex|Supported as nonblocking `FUTEX_WAKE`, preserving the private flag when present|
