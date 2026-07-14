@@ -1,0 +1,29 @@
+486132 clone3({flags=0x3d0f00, child_tid=0x7e4cf5fff990, parent_tid=0x7e4cf5fff990, exit_signal=0, stack=0x7e4cf57ff000, stack_size=0x7fff80, tls=0x7e4cf5fff6c0} => {parent_tid=[486133]}, 88) = 486133
+486133 exit(0) = ?
+486133 +++ exited with 0 +++
+486132 clone(child_stack=NULL, flags=0x1200000|17, child_tidptr=0x7e4cf6368a10) = 486134
+486132 wait4(0x76af6, 0x7fff1c3f70d4, 0, 0 <unfinished ...>
+486134 exit_group(0) = ?
+486134 +++ exited with 0 +++
+486132 <... wait4 resumed>) = 0x76af6
+486132 --- SIGCHLD {si_signo=17, si_code=0x1, si_pid=486134, si_uid=1001, si_status=0, si_utime=0, si_stime=0} ---
+486132 vfork( <unfinished ...>
+486135 exit_group(0) = ?
+486132 <... vfork resumed>) = 486135
+486135 +++ exited with 0 +++
+486132 --- SIGCHLD {si_signo=17, si_code=0x1, si_pid=486135, si_uid=1001, si_status=0, si_utime=0, si_stime=0} ---
+486132 wait4(0x76af7, 0x7fff1c3f70c4, 0, 0) = 0x76af7
+486132 clone(child_stack=0x5896bba9e3b0, flags=17) = 486136
+486132 wait4(0x76af8, 0x7fff1c3f70d4, 0, 0 <unfinished ...>
+486136 exit(0) = ?
+486136 +++ exited with 0 +++
+486132 <... wait4 resumed>) = 0x76af8
+486132 --- SIGCHLD {si_signo=17, si_code=0x1, si_pid=486136, si_uid=1001, si_status=0, si_utime=0, si_stime=0} ---
+486132 clone3({flags=0, exit_signal=17, stack=NULL, stack_size=0}, 88) = 486137
+486132 wait4(0x76af9, 0x7fff1c3f70d4, 0, 0 <unfinished ...>
+486137 exit_group(0) = ?
+486137 +++ exited with 0 +++
+486132 <... wait4 resumed>) = 0x76af9
+486132 --- SIGCHLD {si_signo=17, si_code=0x1, si_pid=486137, si_uid=1001, si_status=0, si_utime=0, si_stime=0} ---
+486132 exit_group(0) = ?
+486132 +++ exited with 0 +++

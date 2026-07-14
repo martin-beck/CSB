@@ -113,6 +113,11 @@ Alternatively:
 strace -o strace.log -a 1 -s 65500 -v -xx -f -Xraw --raw=wait4 <app-binary>
 ```
 
+Small task-creation applications and checked-in traces are available under
+`bm-generator/tests/task-lifecycle/`. They cover pthread-style clone/clone3,
+fork, vfork, process-style clone, process-style clone3, and a combined trace.
+Run `test-fixtures.sh` there to refresh and concurrency-test the fixtures.
+
 The scripts should be run in the same order they are enumerated:
 
 ```bash
@@ -231,7 +236,8 @@ dropped during [syzlang][] program generation.
 
 |Syscall|Reason|
 |---|---|
-|clone|Multithreaded tests are not supported|
+|clone, clone3|Supported as bounded task lifecycles: pthread-like flags create and join a thread; process-like flags fork and reap a child; `CLONE_VFORK` uses the vfork lifecycle. Original stacks, TLS, TIDs, and child code are not replayed.|
+|fork, vfork|Supported as bounded create, immediate child exit, and exact-child wait lifecycles.|
 |execve|Replaces actual benchmark program|
 |arch_prctl|No enabled syzkaller target description in the current generator target|
 |mmap, mprotect, msync, mremap, munmap, madvise|Supported on generated scratch VMAs with bounded length and sanitized flags; `munmap` and `mremap` get setup mappings|

@@ -1,0 +1,8 @@
+486102 vfork( <unfinished ...>
+486103 exit_group(0) = ?
+486102 <... vfork resumed>) = 486103
+486103 +++ exited with 0 +++
+486102 --- SIGCHLD {si_signo=17, si_code=0x1, si_pid=486103, si_uid=1001, si_status=0, si_utime=0, si_stime=0} ---
+486102 wait4(0x76ad7, 0x7ffd95c745b4, 0, 0) = 0x76ad7
+486102 exit_group(0) = ?
+486102 +++ exited with 0 +++

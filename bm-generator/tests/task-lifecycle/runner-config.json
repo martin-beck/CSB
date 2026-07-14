@@ -1,0 +1,20 @@
+{
+  "plots": [],
+  "benchmark_config": {
+    "noise": [0],
+    "threads": {"values": [[1, 4]]},
+    "duration": 1,
+    "exec_env": {"native": []}
+  },
+  "containers": {"core_count": 4},
+  "applications": [
+    {"name": "task-lifecycle-e2e_tl_pthread_create_thread_create_join", "operations": [1024]},
+    {"name": "task-lifecycle-e2e_tl_fork_fork_wait", "operations": [1024]},
+    {"name": "task-lifecycle-e2e_tl_vfork_vfork_wait", "operations": [1024]},
+    {"name": "task-lifecycle-e2e_tl_clone_fork_wait", "operations": [1024]},
+    {"name": "task-lifecycle-e2e_tl_clone3_fork_wait", "operations": [1024]},
+    {"name": "task-lifecycle-e2e_tl_combined_thread_create_join", "operations": [1024]},
+    {"name": "task-lifecycle-e2e_tl_combined_fork_wait", "operations": [1024]},
+    {"name": "task-lifecycle-e2e_tl_combined_vfork_wait", "operations": [1024]}
+  ]
+}

@@ -1,0 +1,8 @@
+486092 clone(child_stack=NULL, flags=0x1200000|17, child_tidptr=0x74411f10da10) = 486093
+486092 wait4(0x76acd, 0x7ffc7171cf24, 0, 0 <unfinished ...>
+486093 exit_group(0) = ?
+486093 +++ exited with 0 +++
+486092 <... wait4 resumed>) = 0x76acd
+486092 --- SIGCHLD {si_signo=17, si_code=0x1, si_pid=486093, si_uid=1001, si_status=0, si_utime=0, si_stime=0} ---
+486092 exit_group(0) = ?
+486092 +++ exited with 0 +++

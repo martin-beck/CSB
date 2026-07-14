@@ -1,0 +1,5 @@
+486082 clone3({flags=0x3d0f00, child_tid=0x7fc49ddff990, parent_tid=0x7fc49ddff990, exit_signal=0, stack=0x7fc49d5ff000, stack_size=0x7fff80, tls=0x7fc49ddff6c0} => {parent_tid=[486083]}, 88) = 486083
+486083 exit(0) = ?
+486083 +++ exited with 0 +++
+486082 exit_group(0) = ?
+486082 +++ exited with 0 +++

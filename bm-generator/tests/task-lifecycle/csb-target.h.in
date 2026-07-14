@@ -1,0 +1,63 @@
+/* Generated-test wrapper for one syz-prog2c CSB header. */
+#include <CSB/bm_helper.h>
+#include <CSB/bm_target.h>
+#include <dirent.h>
+#include <stdint.h>
+
+#define UNIQUE_ID prog
+#define BM_CTX_TID (ctx->tid)
+
+struct thread_ctx_s {
+    size_t tid;
+    uint64_t *r_prog;
+    int num_succeeded_prog;
+    int num_failed_prog;
+};
+
+bool abort_on_fail = false;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#include "syz/@SYZ_HEADER@"
+#pragma GCC diagnostic pop
+
+static inline char *bm_target_get_name(void) { return "@TARGET@"; }
+static inline size_t bm_target_op_count(void) { return 1; }
+
+static inline void
+bm_target_get_op_name(char *out, const size_t len, size_t op_id)
+{
+    snprintf(out, len, "task_lifecycle");
+    V_UNUSED(op_id);
+}
+
+static inline void bm_target_init(size_t size, size_t threads)
+{
+    V_UNUSED(size, threads);
+}
+
+static inline void bm_target_reg(thread_ctx_t *ctx, size_t tid)
+{
+    ctx->tid = tid;
+    bm_target_reg_prog(ctx);
+}
+
+static inline bm_op_res_t
+bm_dispatch_operation(thread_ctx_t *ctx, size_t op_id)
+{
+    int before = ctx->num_succeeded_prog;
+    bm_dispatch_operation_prog(ctx, op_id);
+    return (bm_op_res_t){.op_count = 1,
+                         .succ_count = ctx->num_succeeded_prog > before};
+}
+
+static inline void bm_target_dereg(thread_ctx_t *ctx, size_t tid)
+{
+    bm_target_dereg_prog(ctx);
+    V_UNUSED(tid);
+}
+
+static inline void bm_target_destroy(size_t threads) { V_UNUSED(threads); }
+static inline void bm_target_extra_info(char *buf, size_t len)
+{
+    V_UNUSED(buf, len);
+}
