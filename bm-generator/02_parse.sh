@@ -2,6 +2,8 @@
 # Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+set -e
+
 # Check that exactly one argument is given
 if [ $# != 1 ]; then
   echo "Usage: $0 </path/to/strace/log/file>"
@@ -58,5 +60,10 @@ cd "${DIR_SYZ_SRC}"
 bin/syz-trace2syz -vv 0 -os "${TRACE_OS_RESOLVED}" -arch "${TRACE_ARCH_RESOLVED}" -file "${TRACE_ABS}" --deserialize "${DIR_PROG_ABS}" --nocorpus
 
 cd "${DIR_CUR}"
+
+if ! find "${DIR_PROG_ABS}" -type f -name '*.prog' -print -quit | grep -q .; then
+  echo "No syzkaller programs were generated from ${TRACE_ABS}." >&2
+  exit 1
+fi
 
 ./helper/compare_strace_to_syzprog.sh "${TRACE_ABS}" "${DIR_PROG_ABS}"
