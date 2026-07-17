@@ -77,23 +77,33 @@ github_url() {
 fetch() {
   mkdir -p -- "$(dirname -- "$2")"
   if [[ -s "$2" ]]; then
-    curl -fL --retry 3 -C - -o "$2" "$(github_url "$1")" || {
+    curl -fL --retry 5 --retry-all-errors --connect-timeout 15 -C - -o "$2" "$(github_url "$1")" || {
       rm -f -- "$2"
-      curl -fL --retry 3 -o "$2" "$(github_url "$1")"
+      curl -fL --retry 5 --retry-all-errors --connect-timeout 15 -o "$2" "$(github_url "$1")"
     }
   else
-    curl -fL --retry 3 -o "$2" "$(github_url "$1")"
+    curl -fL --retry 5 --retry-all-errors --connect-timeout 15 -o "$2" "$(github_url "$1")"
   fi
 }
 github_clone() {
   local repo="$1" destination="$2"
   git clone --depth 1 "$(github_url "https://github.com/${repo}")" "${destination}"
 }
-github_latest_tag() { curl -fsSL "https://api.github.com/repos/$1/releases/latest" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1; }
+github_latest_tag() {
+  local tag
+  tag="$(curl -fsSL --retry 5 --retry-all-errors --connect-timeout 15 \
+    "https://api.github.com/repos/$1/releases/latest" |
+    jq -r '.tag_name // empty')"
+  [[ -n "${tag}" ]] || die "GitHub returned no release tag for $1"
+  printf '%s\n' "${tag}"
+}
 github_asset_url() {
-  local repo="$1" pattern="$2"
-  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" |
-    jq -r --arg re "${pattern}" '.assets[] | select(.name | test($re)) | .browser_download_url' | head -n1
+  local repo="$1" pattern="$2" url
+  url="$(curl -fsSL --retry 5 --retry-all-errors --connect-timeout 15 \
+    "https://api.github.com/repos/${repo}/releases/latest" |
+    jq -r --arg re "${pattern}" '[.assets[] | select(.name | test($re)) | .browser_download_url][0] // empty')"
+  [[ -n "${url}" ]] || die "GitHub returned no asset matching ${pattern} for ${repo}"
+  printf '%s\n' "${url}"
 }
 
 ensure_busybox_rootfs() {
