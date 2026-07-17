@@ -2,6 +2,8 @@
 # Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+set -e
+
 # Check that exactly one argument is given
 if [ $# != 1 ]; then
   echo "Usage: $0 </path/to/strace/log/file>"
@@ -55,4 +57,8 @@ bin/syz-trace2syz -vv 0 -file "${TRACE_ABS}" --deserialize "${DIR_PROG_ABS}" --n
 
 cd "${DIR_CUR}"
 
+compgen -G "${DIR_PROG_ABS}/*.prog" >/dev/null || {
+  echo "Trace translation produced no syzlang programs." >&2
+  exit 1
+}
 ./helper/compare_strace_to_syzprog.sh "${TRACE_ABS}" "${DIR_PROG_ABS}"

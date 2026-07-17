@@ -23,4 +23,4 @@ fi
 
 mkdir -p "${DIR_TARGETS}"
 
-find "${DIR_PROG}" -type f -name '*.prog' -print0 | xargs -0 -n 1 -P ${JOBS} ./helper/prog2bm.sh
+find "${DIR_PROG}" -type f -name '*.prog' -print0 | xargs -r -0 -n 1 -P ${JOBS} ./helper/prog2bm.sh
