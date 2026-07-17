@@ -28,15 +28,9 @@ Each capture is separate: `create`, `create-start`, `stop`, `kill`, `delete`,
 `force-delete`, `bind-mount`, `tmpfs`, `network`, `userns`, `cgroup`, `seccomp`,
 and deliberate `failure`.
 
-`sweep.sh --trace-skips` additionally emits a short installation-probe trace
-for cells where a tool has no distinct API. These traces always retain an
-adjacent `.skip` explanation and are not lifecycle data; the mode exists to
-verify every script path and expected output filename on a new host.
-
-For a complete matrix, first run `sweep.sh --trace` to capture and strictly
-verify the real operations. Then run `run.sh --trace-skips TOOL POINT` for the
-unsupported cells reported by `run.sh --list`; probe traces are intentionally
-kept separate from lifecycle traces by their adjacent `.skip` files.
+Unsupported cells produce only an explanatory `.skip` file. The harness does
+not trace an installation probe for these cells because such output is not a
+trace of the named lifecycle operation.
 
 `requirements.tsv` is the machine-readable requirement inventory and
 `requirements.sh --check` checks the current host. Self-contained release

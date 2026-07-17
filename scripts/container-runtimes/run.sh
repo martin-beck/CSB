@@ -6,12 +6,12 @@
 set -Eeuo pipefail
 source "$(cd -- "$(dirname -- "$0")" && pwd)/lib/common.sh"
 
-usage() { printf 'usage: %s [--trace|--trace-skips|--no-trace|--plan] TOOL POINT\n       %s --list\n' "$0" "$0"; }
+usage() { printf 'usage: %s [--trace|--no-trace|--plan] TOOL POINT\n       %s --list\n' "$0" "$0"; }
 if [[ "${1:-}" == --list ]]; then
   for t in "${TOOLS[@]}"; do for p in "${POINTS[@]}"; do printf '%s\t%s\n' "$t" "$p"; done; done
   exit 0
 fi
-mode="${1:---trace}"; [[ "${mode}" =~ ^--(trace|trace-skips|no-trace|plan)$ ]] || { usage; exit 2; }; shift
+mode="${1:---trace}"; [[ "${mode}" =~ ^--(trace|no-trace|plan)$ ]] || { usage; exit 2; }; shift
 [[ $# == 2 ]] || { usage; exit 2; }
 tool="$1" point="$2"
 contains "${tool}" "${TOOLS[@]}" || die "unknown tool: ${tool}"
@@ -21,12 +21,6 @@ clean_case_dir "${tool}" "${point}"
 output="${TRACE_DIR}/$(host_arch)/${tool}/${point}.strace"
 if ! tool_supports "${point}"; then
   if [[ "${mode}" == --plan ]]; then printf 'SKIP %s/%s: no distinct operation\n' "${tool}" "${point}"; exit 0; fi
-  if [[ "${mode}" == --trace-skips ]]; then
-    trace_or_run trace "${output}" "${HARNESS_DIR}/lib/unsupported-probe.sh" "${tool}"
-    "${HARNESS_DIR}/verify.sh" "${output}"
-    write_skip "${output}" "${tool} has no distinct ${point} operation; trace contains an installation probe only"
-    exit 0
-  fi
   write_skip "${output}" "${tool} has no distinct ${point} operation"
   [[ "${STRICT_SKIPS:-0}" == 0 ]] || exit 1
   exit 0
@@ -35,6 +29,6 @@ mapfile -d '' -t command < <(tool_command "${point}")
 ((${#command[@]})) || die "adapter emitted no command"
 if [[ "${mode}" == --plan ]]; then printf '%q ' "${command[@]}"; printf '\n'; exit 0; fi
 [[ "${ALLOW_NON_ARM64:-0}" == 1 ]] || require_arm64
-run_mode="${mode#--}"; [[ "${run_mode}" == trace-skips ]] && run_mode=trace
+run_mode="${mode#--}"
 trace_or_run "${run_mode}" "${output}" "${command[@]}"
 [[ "${run_mode}" == trace ]] && "${HARNESS_DIR}/verify.sh" "${output}" "${tool}" "${point}"

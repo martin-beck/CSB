@@ -5,7 +5,7 @@
 # Exercise the complete matrix; continue after failures and summarize at the end.
 set -Eeuo pipefail
 source "$(cd -- "$(dirname -- "$0")" && pwd)/lib/common.sh"
-mode="${1:---plan}"; [[ "${mode}" =~ ^--(trace|trace-skips|no-trace|plan)$ ]] || die "expected --trace, --trace-skips, --no-trace, or --plan"
+mode="${1:---plan}"; [[ "${mode}" =~ ^--(trace|no-trace|plan)$ ]] || die "expected --trace, --no-trace, or --plan"
 failures=0
 for tool in "${TOOLS[@]}"; do
   for point in "${POINTS[@]}"; do
