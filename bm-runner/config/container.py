@@ -13,8 +13,12 @@ from config.policy import CoreAssignPolicy, PackGroup
 
 
 class ContainersConfig(dict):
-    MIN_NUM_STEPS: int = 6  # default minimum number of steps to set default container_list
-    MAX_NUM_STEPS: int = 10  # default maximum number of steps to set default container_list
+    MIN_NUM_STEPS: int = (
+        6  # default minimum number of steps to set default container_list
+    )
+    MAX_NUM_STEPS: int = (
+        10  # default maximum number of steps to set default container_list
+    )
     CONFIG_KEY: str = "containers"
     DEFAULT_IMG: dict[OperatingSystem, str] = {
         OperatingSystem.openEuler: "hub.oepkgs.net/openeuler/openeuler",
@@ -80,7 +84,6 @@ class ContainersConfig(dict):
         self.__set_cpus_containers(
             core_affinity_offsets=core_affinity_offsets, container_list=container_list
         )
-        self.__ensure_img_exists()
 
     def __set_cpus_containers(self, core_affinity_offsets, container_list):
         """
@@ -163,7 +166,9 @@ class ContainersConfig(dict):
         # we start range from zero and use max + 1, so that the last value will max
         # Always add 1 and max_num_containers
         default_container_list = list(range(0, max + 1, step))
-        assert default_container_list[0] == 0, "unexpected, given the range starts with zero"
+        assert (
+            default_container_list[0] == 0
+        ), "unexpected, given the range starts with zero"
         # we remove zero from the list
         default_container_list.remove(0)
         # make sure first element of the list is one
@@ -202,14 +207,19 @@ class ContainersConfig(dict):
 
     def __pull_image(self):
         client = docker.from_env()
-        bm_log(f"Docker image {self.image} does not exist. Pulling it now...\n", LogType.INFO)
+        bm_log(
+            f"Docker image {self.image} does not exist. Pulling it now...\n",
+            LogType.INFO,
+        )
         try:
             client.images.pull(self.image)
         except Exception as e:
-            bm_log(f"Failed to pull image {self.image} with error {str(e)}", LogType.FATAL)
+            bm_log(
+                f"Failed to pull image {self.image} with error {str(e)}", LogType.FATAL
+            )
             sys.exit(1)
 
-    def __ensure_img_exists(self):
+    def ensure_img_exists(self):
         client = docker.from_env()
         try:
             client.images.get(self.image)

@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 from config.container import ContainersConfig, CoreAssignPolicy
+from bm_config import CampaignConfig
 from utils.logger import bm_log
 from itertools import product
 import pytest
+import json
 
 
 CASES = [
@@ -66,9 +68,13 @@ def test_gen_container_list_defaults():
     common_core_counts = [6, 8, 12, 16, 24, 32, 88, 96, 160, 192, 256, 320, 384, 512]
     for num_cores in common_core_counts:
         container_counts = gen_list(num_cores)
-        bm_log(f"num_cores={num_cores} ({len(container_counts)} tests): {container_counts}")
+        bm_log(
+            f"num_cores={num_cores} ({len(container_counts)} tests): {container_counts}"
+        )
         assert len(container_counts) >= min_steps, f"Failed for num_cores={num_cores}"
-        assert len(container_counts) <= max_steps + 2, f"Failed for num_cores={num_cores}"
+        assert (
+            len(container_counts) <= max_steps + 2
+        ), f"Failed for num_cores={num_cores}"
         assert (
             container_counts[0] == 1
         ), f"First element should be 1 for num_cores={num_cores}: {container_counts}"
@@ -87,6 +93,29 @@ def test_gen_container_list_defaults():
             assert (
                 container_counts[0] == 1
             ), f"First element should be 1 for num_cores={num_cores}, cores_per_container={cores_per_container}: {container_counts}"
-            assert len(container_counts) <= max_steps + 2, f"Failed for max_containers={num_cores}"
+            assert (
+                len(container_counts) <= max_steps + 2
+            ), f"Failed for max_containers={num_cores}"
 
     # There are edge cases that we don't have specific expectations for.
+
+
+@pytest.mark.parametrize(
+    "execution_type, expected_calls", [("native", 0), ("container", 1)]
+)
+def test_image_checked_only_for_container_execution(
+    mocker, tmp_path, execution_type, expected_calls
+):
+    ensure_image = mocker.patch("config.container.ContainersConfig.ensure_img_exists")
+    mocker.patch("bm_config.get_host_ip", return_value="127.0.0.1")
+    config = {
+        "benchmark_config": {"exec_env": {execution_type: []}},
+        "containers": {"container_list": {"values": [[1]]}},
+        "applications": [{"name": "bm_empty", "operations": [1024]}],
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(config))
+
+    CampaignConfig(str(path))
+
+    assert ensure_image.call_count == expected_calls

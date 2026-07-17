@@ -10,7 +10,7 @@ from config.plugin import Plugin
 from config.plot import PlotConfig
 from config.container import ContainersConfig
 from config.application import Application
-from config.benchmark import BenchmarkConfig
+from config.benchmark import BenchmarkConfig, ExecutionType
 import shutil
 from config.nics import NicsConfig
 from utils.logger import bm_log, LogType
@@ -116,9 +116,12 @@ class CampaignConfig:
     def __parse_container_cfg(self) -> ContainersConfig:
         containers = self.config.get(ContainersConfig.CONFIG_KEY)
         if containers:
-            return ContainersConfig(**containers)
+            result = ContainersConfig(**containers)
         else:
-            return ContainersConfig()
+            result = ContainersConfig()
+        if ExecutionType.CONTAINER in self.bm_cfg.exec_env:
+            result.ensure_img_exists()
+        return result
 
     def get_container_config(self) -> ContainersConfig:
         return self.container_cfg
