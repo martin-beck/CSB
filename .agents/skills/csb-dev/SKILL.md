@@ -17,14 +17,6 @@ not here.
   plots, and environment variables.
 - `csb` for ordinary benchmark setup, running, replotting, monitor setup, and
   permission-sensitive runtime work.
-- `csb-remote` whenever reproduction or validation depends on an SSH benchmark
-  host, kernel, topology, container runtime, perf, bpftrace, sysstat, cgroups,
-  NICs, or host permissions.
-- `csb-analysis` for interpreting existing result artifacts or preparing
-  evidence-backed kernel patch material.
-- `csb-refine` for iterative benchmark reruns and kernel-performance
-  refinement loops.
-
 ## First Checks
 
 From the CSB root:
