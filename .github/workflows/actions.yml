@@ -18,6 +18,15 @@ jobs:
       - name: Test folded-stack selection helpers
         run: ./scripts/fg-fit/test-select.sh
 
+  Test-Flamegraph-Fitting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Test iterative fitting
+        run: ./scripts/fg-fit/test-fit.sh
+
   Run-bm-generator:
     runs-on: ubuntu-latest
     steps:

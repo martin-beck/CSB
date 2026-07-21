@@ -89,8 +89,10 @@ the following scripts within `bm-generator/`:
 |`05_prepare.sh`| Processes all `reduced/*.prog` [syzlang][] programs. Each input program is converted into a C header containing a function calling all dependent syscalls from the input [syzlang][] program. Output is stored in `../bench/targets/gen-ws/syz/min_<id3>.h` |
 |`06_generate.sh`| Uses [tmplr][] to generate [bm-runner][] compatible headers and JSON configuration for all generated `../bench/targets/gen-ws/syz/min_<id3>.h` files. Output is stored as `../bench/targets/gen-ws/min_<id3>.h` header and `../../config/gen-ws/fg_min_<id3>.json`. |
 |`07_select.sh`| Runs all the auto-generated benchmarks for a short duration, performs pairwise comparison of the flamegraphs of the benchmark execution, and prints a list of benchmarks that are different enough from each other. |
+|`08_fit.sh`| Iteratively composes the selected kernel-stack profiles until their distance from an application reference is at most `5%` by default. |
 
-The only script that takes an argument is `02_parse.sh`, which needs a path to an strace log file generated as described below.
+`02_parse.sh` takes the collected strace path; `08_fit.sh` takes the collected
+reference stack path.
 ```bash
 ./02_parse.sh </path/to/strace.log>
 ```
@@ -133,7 +135,41 @@ cd bm-generator/
 ./05_prepare.sh
 ./06_generate.sh
 ./07_select.sh
+./08_fit.sh /path/to/reference.stacks
 ```
+
+### Portable flamegraph fitting
+
+On machine A, run the representative workload twice: once under strace and once
+without strace under perf. The collector symbolizes kernel stacks before transfer,
+so neither the application nor its kernel symbols are required on machine B.
+
+```bash
+./scripts/fg-fit/collect.sh --output app-capture --target 'tgid:app' -- /path/to/app arguments
+```
+
+The command must run a complete, finite representative workload because the
+collector executes it separately for the trace and the unbiased perf profile.
+
+Copy `app-capture/` to machine B, then run steps 00 through 06 with
+`app-capture/trace.strace`. Step 07 profiles and removes redundant generated
+benchmarks. For applications with differently named worker threads, set
+`CSB_FLAMEGRAPH_TARGET=tgid:<main-comm>` before step 07.
+
+Step 08 greedily adds the candidate that most improves normalized folded-stack
+closeness in each round. It stops at a residual distance of 5 percentage
+points, when no candidate improves the result, or after 100 rounds:
+
+```bash
+./08_fit.sh ../app-capture/reference.stacks
+# Override defaults when needed:
+./08_fit.sh ../app-capture/reference.stacks --epsilon 2 --max-rounds 200
+```
+
+Each round prints only its closeness, residual, and selected benchmark.
+`bench-fit/weights.csv` is the resulting workload mixture;
+`bench-fit/fitted.stacks`, `fitted.html`, and `progress.log` make the result
+reproducible and reviewable.
 
 `01_build.sh` configures a missing CSB build directory automatically. Set
 `DIR_BUILD` to use a build directory other than `../build`. Parsing, extraction,
