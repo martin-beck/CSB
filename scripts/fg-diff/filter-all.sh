@@ -19,5 +19,6 @@ find "$input_dir" -name flamegraph.stacks | while read n; do
     i=$(echo "$n" | sed -e "s#${input_dir}[/]\?##g" | cut -d/ -f1)
     suff=$(dirname "$suffname")
     appname=$(jq -r '.[0].app' "$input_dir/$i/$suff/experiment_results.json")
-    "$scriptpath/filter.sh" "$input_dir/$i/$suff/perf.data" "${appname:0:15}" "$output_dir"/"$appname".html;
+    selector=${CSB_FLAMEGRAPH_TARGET:-${appname:0:15}}
+    "$scriptpath/filter.sh" "$input_dir/$i/$suff/perf.data" "$selector" "$output_dir"/"$appname".html;
 done

@@ -3,23 +3,28 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import pandas as pd
+import csv
 import pathlib
 
+
 def process(result_file, cutoff):
-    d = pd.read_csv(result_file, header=None, comment="#", engine="python", on_bad_lines="error")
-    s = set(d[0])
-    for i,r in d.sort_values(by=[0, 1]).iterrows():
-        if r[0] != r[1] and r[0] in s and r[2] < cutoff:
-            s.discard(r[1])
-    return s
+    with result_file.open(newline="") as source:
+        rows = [row for row in csv.reader(source) if row and not row[0].startswith("#")]
+    selected = {row[0] for row in rows}
+    for left, right, difference, *_ in sorted(rows):
+        if left != right and left in selected and float(difference) < cutoff:
+            selected.discard(right)
+    return selected
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Filter benchmarks based on the similarity of the flame graphs")
+    parser = argparse.ArgumentParser(
+        description="Filter benchmarks based on the similarity of the flame graphs"
+    )
     parser.add_argument(
         "--cutoff",
         help="The benchmarks with maximum stack difference below this percentage will be considered the same.",
-        type=float
+        type=float,
     )
     parser.add_argument(
         "--input",

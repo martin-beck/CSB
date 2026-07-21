@@ -11,6 +11,13 @@ jobs:
       - name: Test portable collector
         run: ./scripts/fg-fit/test-collect.sh
 
+  Test-Flamegraph-Selection:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test folded-stack selection helpers
+        run: ./scripts/fg-fit/test-select.sh
+
   Run-bm-generator:
     runs-on: ubuntu-latest
     steps:
