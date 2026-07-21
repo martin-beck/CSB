@@ -5,10 +5,11 @@ import os
 import pandas as pd
 from monitors.monitor import Monitor
 from utils.logger import bm_log, LogType
-from utils.process import BackgroundProcess
 from benchkit.shell.shell import shell_out
 from bm_utils import read_data_frame_from_csv
 from visual.plotchart import PlotConfig, PlotChart
+from bm_utils import is_perf_event_supported
+from monitors.perf import FlameGraph
 
 
 class PerfLock(Monitor):
@@ -17,6 +18,8 @@ class PerfLock(Monitor):
     LOCK_CONTENTION_SEPARATOR = ";"
     LOCK_CONTENTION_TOP_N = 20
 
+    REQUIRED_EVENTS = ["lock:contention_begin", "lock:contention_end"]
+
     # The command `perf lock contention -x ";"` will output a CSV with the following header
     # output: contended; total wait; max wait; avg wait; type; caller
     header = ["contended", "total_wait", "max_wait", "avg_wait", "type", "caller"]
@@ -24,38 +27,13 @@ class PerfLock(Monitor):
     def __init__(self, output_dir: str, args: list[str] = ["-a"]):
         super().__init__(dir=output_dir, args=args)
         self.name = "perf-lock"
-        self.perf_lock_data = f"{self.name}.data"
         self.perf_contention_csv = os.path.join(self.dir, self.LOCK_CONTENTION_CSV)
-        cmds = [
-            "sudo",
-            "perf",
-            "lock",
-            "record",
-            "-g",
-            "-e",
-            "lock:contention_begin",
-            "-e",
-            "lock:contention_end",
-            "--output",
-            self.perf_lock_data,
-        ]
-        cmds.extend(args)
-
-        self.perf_lock = BackgroundProcess(
-            name=self.name,
-            out_dir=output_dir,
-            cmds=cmds,
-            requires=["perf"],
-            pin=self.get_cpus(),
-        )
 
     def start(self):
-        self.perf_lock.start()
+        pass
 
     def stop(self):
-        if self.perf_lock is not None:
-            # perf lock record takes longer time to respond
-            self.perf_lock.stop(timeout=60)
+        pass
 
     def collect_results(self):
         output = ""
@@ -76,6 +54,20 @@ class PerfLock(Monitor):
                 bm_log(f"{self.name} did not produce a valid data-frame", LogType.ERROR)
         return output
 
+    @staticmethod
+    def is_supported() -> bool:
+        for e in PerfLock.REQUIRED_EVENTS:
+            if not is_perf_event_supported(e):
+                return False
+        return True
+
+    @staticmethod
+    def get_args() -> list[str]:
+        args = []
+        for event in PerfLock.REQUIRED_EVENTS:
+            args.extend(["-e", event])
+        return args
+
     def __run_lock_contention(self) -> bool:
         cmd = [
             "sudo",
@@ -85,12 +77,17 @@ class PerfLock(Monitor):
             "-k",  # sort by average wait
             self.TARGET_METRIC,
             "-i",  # input file is the output of `perf lock record`
-            self.perf_lock_data,
+            FlameGraph.DATA_FILE,
             "-x",  # output report should be a CSV with `;` as delimiter
             ";",
             "--output",
             self.perf_contention_csv,
         ]
+        if not os.path.exists(os.path.join(self.dir, FlameGraph.DATA_FILE)):
+            bm_log(
+                f"{self.name} Could not find {FlameGraph.DATA_FILE} in {self.dir}!", LogType.ERROR
+            )
+            return False
         try:
             # perf lock contention is not available on older kernel versions
             # the command can fail

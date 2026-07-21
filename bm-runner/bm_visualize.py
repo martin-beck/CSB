@@ -15,6 +15,8 @@ from visual.plotchart import PlotChart
 from monitors.bpftrace import BpfTrace
 from visual.report import Report
 from bm_utils import read_data_frame_from_csv
+from typing import Optional
+import copy
 
 
 ###########################################################################
@@ -35,7 +37,7 @@ def add_info_tbl(df, report: Report, result_file: str):
 
 
 ###########################################################################
-def create_success_rate_plot(org_df, config: PlotConfig, dir) -> str:
+def create_success_rate_plot(org_df, config: PlotConfig, dir) -> Optional[str]:
     prefix = config.y
     count_col = f"{prefix}_count"
     succ_col = f"{prefix}_succ_count"
@@ -51,11 +53,11 @@ def create_success_rate_plot(org_df, config: PlotConfig, dir) -> str:
     )
     # overwrite
     config.y = succ_percent
-    return PlotChart.plot(plot=config, df=df, out_fig_name=f"{dir}/{prefix}_succ_percent")
+    return PlotChart.plot(plot=config, df=df, out_fig_name=f"{dir}/{prefix}{config.fname}")
 
 
 ###########################################################################
-def create_min_max_avg_plot(org_df, config: PlotConfig, dir: str) -> str:
+def create_min_max_avg_plot(org_df, config: PlotConfig, dir: str) -> Optional[str]:
     """
     Treats `config.y` as a prefix and look for min, max, and avg values
     It assumes such columns exist in the dataframe <config.y>min,
@@ -151,14 +153,16 @@ def create_min_max_avg_plot(org_df, config: PlotConfig, dir: str) -> str:
         errorbar=min_max_errorbar,
     )
 
-    return pc.save(out_fig_name=f"{dir}/{config.y}_min_avg_max")
+    return pc.save(out_fig_name=f"{dir}/{config.fname}")
 
 
 ###########################################################################
-def create_plot(df, plot: PlotConfig, dir, info: str) -> str:
+def create_plot(df, plot: PlotConfig, dir, info: str) -> Optional[str]:
+    plot = copy.deepcopy(plot)
+    plot.fname += f"_{info}"
     match plot.type:
         case PlotType.NORMAL:
-            fig_name = f"{dir}/{plot.x}_vs_{plot.y}_{info}"
+            fig_name = f"{dir}/{plot.fname}"
             return PlotChart.plot(plot=plot, df=df, out_fig_name=fig_name)
         case PlotType.MIN_MAX_AVG:
             return create_min_max_avg_plot(org_df=df, config=plot, dir=dir)
@@ -239,22 +243,22 @@ def split_data_frame(df: DataFrame) -> dict:
     frames = {}
     threads = df["nb_threads"].unique()
     for t in threads:
-        key = f"t={t}"
+        key = f"{t}_threads"
         frames[key] = df[df["nb_threads"] == t]
     return frames
 
 
-def create_mean_plot(df: DataFrame, plot: PlotConfig, dir):
+def create_mean_plot(df: DataFrame, plot: PlotConfig, dir) -> Optional[str]:
     return PlotChart.plot(
         plot=plot,
         df=df,
-        out_fig_name=f"{dir}/{plot.y}_mean",
+        out_fig_name=f"{dir}/{plot.fname}",
         add_points=True,
         estimator="mean",
     )
 
 
-def create_linearity_plot(df: DataFrame, plot: PlotConfig, dir):
+def create_linearity_plot(df: DataFrame, plot: PlotConfig, dir) -> Optional[str]:
     count_col: str = plot.x  # e.g. container count
     subject_col: str = plot.y  # e.g. throughput
     group_col: str = plot.hue  # e.g. execution env native/container
@@ -294,7 +298,7 @@ def create_linearity_plot(df: DataFrame, plot: PlotConfig, dir):
 
     plot.y = "linearity"
     plot.y_lbl = "Linearity"
-    return PlotChart.plot(plot=plot, df=lin_df, out_fig_name=f"{dir}/linearity")
+    return PlotChart.plot(plot=plot, df=lin_df, out_fig_name=f"{dir}/{plot.fname}")
 
 
 ###########################################################################
@@ -323,7 +327,8 @@ def visualize_in_html(output_dir: Path, title: str, plots: list[PlotConfig]):
     if data_frame is None:
         return
     hostname = data_frame["hostname"].unique()[0]
-    report = Report(title=f"{hostname}-{title}")
+    output_file_name = os.path.join(parentdir(output_dir), f"{output_dir}.html")
+    report = Report(title=f"{hostname}-{title}", fname=output_file_name)
     # we split the data-frame into multiple data frames to help with visualization
     data_frames = split_data_frame(data_frame)
     # For each data frame we'll generate the related graphs
@@ -331,11 +336,10 @@ def visualize_in_html(output_dir: Path, title: str, plots: list[PlotConfig]):
     for key, df in data_frames.items():
         add_info_tbl(df, report, result_file)
         create_plots(df, plots, output_dir, info=key)
-        # dump graphs to HTML document
-        dump_graphs_to_doc(output_dir, report)
 
-    output_file_name = os.path.join(parentdir(output_dir), f"{output_dir}.html")
-    report.save(output_file_name)
+    # dump all plot to the HTML report
+    dump_graphs_to_doc(output_dir, report)
+    report.save()
     bm_log(
         f"visualized results can be found in {output_file_name} with {title}",
         LogType.INFO,

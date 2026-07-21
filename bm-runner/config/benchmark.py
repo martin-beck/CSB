@@ -4,6 +4,9 @@
 from enum import Enum
 from typing import Optional
 from config.list import ListConfig
+from monitors.perflock import PerfLock
+from utils.logger import bm_log, LogType
+from config.env_config import EnvUniversalConfig, UniversalConfig
 
 
 class ExecutionType(str, Enum):
@@ -42,7 +45,7 @@ class MonitorType(str, Enum):
     REDIS_BENCHMARK: parses the output of redis_benchmark.
     SAR_NET: monitors network traffic.
     PERF_STAT: Runs perf stat.
-    PERF_LOCK: Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points. Running `perf_lock` together with `perf` monitor can corrupt the `perf` monitor results.
+    PERF_LOCK: Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points. Note that `perf_lock` monitor invokes `perf` monitor even if it was not added by the user.
     BPF_TRACE: Runs [bpftrace](https://bpftrace.org/docs/release_025/stdlib) with the given programs. Users may list programs from scripts/bpftrace. Giving multiple programs as arguments, will result in launching multiple instances of bpftrace.
     """
 
@@ -97,12 +100,48 @@ class BenchmarkConfig(dict):
         self.duration = duration
         self.repeat = repeat
         self.exec_env = exec_env
-        self.monitors = monitors
+        self.monitors = self.__resolve_monitor_dependency(monitors)
         self.threads = (
             ListConfig.from_dict(threads).get_list()
             if threads is not None
             else ListConfig([[1]]).get_list()
         )
+
+    @staticmethod
+    def __resolve_monitor_dependency(
+        monitors: dict[MonitorType, list[str]],
+    ) -> dict[MonitorType, list[str]]:
+        """
+        Enforces the right order of monitors, if there is a dependency
+        between monitors, e.g. `perf_lock` must occur after `perf`.
+        """
+        if (
+            EnvUniversalConfig.is_off(UniversalConfig.CSB_ANALYZE)
+            or MonitorType.PERF_LOCK not in monitors
+        ):
+            return monitors
+
+        if not PerfLock.is_supported():
+            bm_log(
+                f"{MonitorType.PERF_LOCK.value} is not supported by the perf/system. This monitor is auto-removed!",
+                LogType.ERROR,
+            )
+            del monitors[MonitorType.PERF_LOCK]
+            return monitors
+
+        perf_args = list(monitors.get(MonitorType.PERF, []))
+        perf_args.extend(PerfLock.get_args())
+        perf_args.extend(monitors[MonitorType.PERF_LOCK])
+
+        resolved_monitors: dict[MonitorType, list[str]] = {}
+        resolved_monitors[MonitorType.PERF] = perf_args
+        resolved_monitors[MonitorType.PERF_LOCK] = monitors[MonitorType.PERF_LOCK]
+
+        for k, v in monitors.items():
+            if k not in {MonitorType.PERF, MonitorType.PERF_LOCK}:
+                resolved_monitors[k] = v
+
+        return resolved_monitors
 
     def get_exec_env_args(self, exec_type: ExecutionType) -> list[str]:
         return self.exec_env.get(exec_type, [])
