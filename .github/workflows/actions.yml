@@ -2,6 +2,15 @@ name: CSB actions
 on: [workflow_dispatch, push, pull_request]
 
 jobs:
+  Test-Flamegraph-Collector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Test portable collector
+        run: ./scripts/fg-fit/test-collect.sh
+
   Run-bm-generator:
     runs-on: ubuntu-latest
     steps:
