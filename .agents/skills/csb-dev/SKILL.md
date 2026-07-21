@@ -38,8 +38,10 @@ regenerate out-of-tree files unless the user asks.
 
 ## Development Guardrails
 
-- Keep edits scoped and follow existing runner, config, monitor, plugin,
-  adapter, and helper-script patterns before adding new abstractions.
+- Keep edits scoped. Reuse existing functionality and follow established
+  runner, config, monitor, plugin, adapter, helper-script, style, and naming
+  patterns before adding new abstractions.
+- Inline-document new code, and add focused unit tests whenever practical.
 - When behavior, public configuration, workflows, or supported commands change,
   update the relevant project doc instead of adding facts to this skill.
 - Preserve public contracts from `doc/bm-runner.md` and `doc/bm-config.md`
@@ -51,6 +53,8 @@ regenerate out-of-tree files unless the user asks.
 
 ## Validation
 
-Use the validation commands in `doc/development.md`. For narrow changes, run the
-smallest relevant tests first; run a tiny real benchmark only when the changed
-behavior needs runtime validation and the host has the required permissions.
+Use the validation commands in `doc/development.md`. Run the smallest relevant
+tests first, then require both `helpers/python-checks.sh` and
+`helpers/python-tests.sh` to pass before handoff. Run a tiny real benchmark only
+when the changed behavior needs runtime validation and the host has the required
+permissions.
