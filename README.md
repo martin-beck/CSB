@@ -58,6 +58,7 @@ CSB
 ├── helpers             # helper scripts used for development and formatting
 └── scripts             # scripts that are used by the framework
     ├── adapters        # scripts used to transform external benchmarks output into a complying format
+    ├── linux-tools     # set up and trace safe examples for common Linux tools
     ├── fg-diff         # scripts used for selecting a set of distinct microbenchmarks
     └── plugins         # scripts used as an additional steps by some of the benchmarks
 ```

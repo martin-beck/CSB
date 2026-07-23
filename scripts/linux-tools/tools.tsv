@@ -1,0 +1,101 @@
+# rank<TAB>command<TAB>debian-package<TAB>rpm-package<TAB>apk-package<TAB>arch-package<TAB>recipe<TAB>description
+1	bash	bash	bash	bash	bash	shell	Bourne Again shell
+2	ls	coreutils	coreutils	coreutils	coreutils	files	list directory entries
+3	cp	coreutils	coreutils	coreutils	coreutils	files	copy files
+4	mv	coreutils	coreutils	coreutils	coreutils	files	move files
+5	rm	coreutils	coreutils	coreutils	coreutils	files	remove files
+6	mkdir	coreutils	coreutils	coreutils	coreutils	files	create directories
+7	cat	coreutils	coreutils	coreutils	coreutils	text	concatenate files
+8	grep	grep	grep	grep	grep	text	search text
+9	sed	sed	sed	sed	sed	text	stream editing
+10	awk	gawk	gawk	gawk	gawk	text	pattern processing
+11	find	findutils	findutils	findutils	findutils	files	find files
+12	xargs	findutils	findutils	findutils	findutils	text	build command lines
+13	pwd	coreutils	coreutils	coreutils	coreutils	files	print working directory
+14	touch	coreutils	coreutils	coreutils	coreutils	files	update file timestamps
+15	chmod	coreutils	coreutils	coreutils	coreutils	files	change file modes
+16	ln	coreutils	coreutils	coreutils	coreutils	files	create links
+17	head	coreutils	coreutils	coreutils	coreutils	text	read file beginning
+18	tail	coreutils	coreutils	coreutils	coreutils	text	read file ending
+19	sort	coreutils	coreutils	coreutils	coreutils	text	sort lines
+20	uniq	coreutils	coreutils	coreutils	coreutils	text	deduplicate adjacent lines
+21	cut	coreutils	coreutils	coreutils	coreutils	text	select text fields
+22	tr	coreutils	coreutils	coreutils	coreutils	text	translate characters
+23	wc	coreutils	coreutils	coreutils	coreutils	text	count text
+24	tee	coreutils	coreutils	coreutils	coreutils	text	copy standard input
+25	date	coreutils	coreutils	coreutils	coreutils	inspect	format time
+26	env	coreutils	coreutils	coreutils	coreutils	inspect	run with an environment
+27	stat	coreutils	coreutils	coreutils	coreutils	files	inspect file metadata
+28	file	file	file	file	file	inspect	identify file types
+29	which	debianutils	which	which	which	inspect	locate commands
+30	whereis	util-linux	util-linux	util-linux	util-linux	inspect	locate command resources
+31	tar	tar	tar	tar	tar	archive	create and inspect archives
+32	gzip	gzip	gzip	gzip	gzip	compress	gzip compression
+33	bzip2	bzip2	bzip2	bzip2	bzip2	compress	bzip2 compression
+34	xz	xz-utils	xz	xz	xz	compress	xz compression
+35	zip	zip	zip	zip	zip	archive	create zip archives
+36	unzip	unzip	unzip	unzip	unzip	archive	extract zip archives
+37	diff	diffutils	diffutils	diffutils	diffutils	text	compare files
+38	patch	patch	patch	patch	patch	text	apply text patches
+39	less	less	less	less	less	text	page text noninteractively
+40	vi	vim-tiny	vim-minimal	vim	vim	editor	edit a temporary file
+41	nano	nano	nano	nano	nano	editor	edit a temporary file
+42	ps	procps	procps-ng	procps	procps-ng	process	list processes
+43	top	procps	procps-ng	procps	procps-ng	process	process snapshot
+44	free	procps	procps-ng	procps	procps-ng	inspect	memory summary
+45	uptime	procps	procps-ng	procps	procps-ng	inspect	uptime summary
+46	uname	coreutils	coreutils	coreutils	coreutils	inspect	kernel identity
+47	hostname	hostname	hostname	busybox	inetutils	inspect	host name
+48	id	coreutils	coreutils	coreutils	coreutils	inspect	user identity
+49	whoami	coreutils	coreutils	coreutils	coreutils	inspect	current user
+50	groups	coreutils	coreutils	coreutils	coreutils	inspect	group membership
+51	df	coreutils	coreutils	coreutils	coreutils	inspect	filesystem capacity
+52	du	coreutils	coreutils	coreutils	coreutils	files	directory usage
+53	lsblk	util-linux	util-linux	util-linux	util-linux	inspect	block devices
+54	lscpu	util-linux	util-linux	util-linux	util-linux	inspect	CPU information
+55	mount	mount	util-linux	util-linux	util-linux	inspect	mounted filesystems
+56	dmesg	util-linux	util-linux	util-linux	util-linux	inspect	kernel message read
+57	journalctl	systemd	systemd	systemd	systemd	service	journal metadata query
+58	systemctl	systemd	systemd	systemd	systemd	service	service state query
+59	ip	iproute2	iproute	iproute2	iproute2	network	network configuration read
+60	ss	iproute2	iproute	iproute2	iproute2	network	socket listing
+61	ping	iputils-ping	iputils	iputils	iputils	network	loopback reachability
+62	traceroute	traceroute	traceroute	traceroute	traceroute	network	loopback route
+63	curl	curl	curl	curl	curl	transfer	local file transfer
+64	wget	wget	wget	wget	wget	transfer	loopback HTTP transfer
+65	ssh	openssh-client	openssh-clients	openssh-client	openssh	ssh	render SSH configuration
+66	scp	openssh-client	openssh-clients	openssh-client	openssh	ssh	parse a local copy request
+67	rsync	rsync	rsync	rsync	rsync	copy	copy a temporary tree
+68	dig	dnsutils	bind-utils	bind-tools	bind	dns	query localhost DNS
+69	nslookup	dnsutils	bind-utils	bind-tools	bind	dns	query localhost DNS
+70	nc	netcat-openbsd	nmap-ncat	netcat-openbsd	openbsd-netcat	network	loopback socket exchange
+71	openssl	openssl	openssl	openssl	openssl	crypto	digest and random bytes
+72	git	git	git	git	git	vcs	create a temporary repository
+73	make	make	make	make	make	build	run a temporary makefile
+74	gcc	gcc	gcc	gcc	gcc	compile	compile and run C
+75	g++	g++	gcc-c++	g++	gcc	compile	compile and run C++
+76	cmake	cmake	cmake	cmake	cmake	build	configure a tiny project
+77	python3	python3	python3	python3	python	language	run a small Python workload
+78	perl	perl	perl	perl	perl	language	run a small Perl workload
+79	ruby	ruby-full	ruby	ruby	ruby	language	run a small Ruby workload
+80	node	nodejs	nodejs	nodejs	nodejs	language	run a small JavaScript workload
+81	npm	npm	npm	npm	npm	language	initialize package metadata offline
+82	java	default-jre-headless	java-17-openjdk-headless	openjdk17-jre	jre-openjdk	language	run JVM version probe
+83	javac	default-jdk-headless	java-17-openjdk-devel	openjdk17	jdk-openjdk	compile	compile and run Java
+84	go	golang-go	golang	go	go	language	compile and run Go
+85	cargo	cargo	cargo	cargo	rust	language	check a temporary Rust crate
+86	rustc	rustc	rust	rust	rust	compile	compile and run Rust
+87	docker	docker.io	moby-engine	docker-cli	docker	service	query Docker client and daemon
+88	podman	podman	podman	podman	podman	service	query Podman state
+89	kubectl	kubectl	kubernetes-client	kubectl	kubectl	service	render local Kubernetes config
+90	helm	helm	helm	helm	helm	service	render a local Helm chart
+91	jq	jq	jq	jq	jq	text	transform JSON
+92	yq	yq	yq	yq	yq	text	transform YAML
+93	tmux	tmux	tmux	tmux	tmux	terminal	create a private server session
+94	screen	screen	screen	screen	screen	terminal	run a detached private session
+95	strace	strace	strace	strace	strace	trace	trace a harmless command
+96	lsof	lsof	lsof	lsof	lsof	inspect	list this process files
+97	tcpdump	tcpdump	tcpdump	tcpdump	tcpdump	network	list capture interfaces
+98	perf	linux-perf	perf	perf	perf	profile	count a harmless command
+99	time	time	time	time	time	process	time a harmless command
+100	watch	procps	procps-ng	procps	procps-ng	process	run one watched command

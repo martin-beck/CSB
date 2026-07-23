@@ -18,6 +18,10 @@ Builtin benchmark targets live under `bench/targets/` and external benchmark
 helpers live under `scripts/adapters/` and `scripts/bm-external/`. Plugin
 scripts referenced from JSON configs live under `scripts/plugins/`.
 
+The common Linux-tool trace harness lives under `scripts/linux-tools/`; its
+README documents the ranked 100-tool corpus, temporary package extraction,
+safety boundary, single-tool runs, validation, and complete traced sweeps.
+
 `deps/syzkaller` is a nested repository/submodule. Check its status and history
 with `git -C deps/syzkaller ...` and keep its changes separate from the CSB root
 repository. Agent-assisted development inside that subproject should use the
@@ -87,6 +91,15 @@ cd bm-runner
 Some commands require Docker, perf, sysstat, cgroups, NIC privileges, or network
 access. If they fail because host permissions or services are unavailable,
 report the missing requirement rather than changing code to hide the failure.
+
+Plan, set up, or trace the common Linux-tool corpus:
+
+```bash
+scripts/linux-tools/run.sh --list
+scripts/linux-tools/setup.sh --all
+scripts/linux-tools/run.sh --trace --duration 30 grep small
+scripts/linux-tools/sweep.sh --trace --run small --duration 30
+```
 
 ## Common Change Patterns
 
