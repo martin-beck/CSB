@@ -50,7 +50,103 @@ class FlameGraph(Monitor):
         for event in cls.perf_events():
             cmds.extend(["-e", event])
         cmds.extend(args)
+        cmds = cls.__sanitize_args(cmds)
         return cmds
+
+    @classmethod
+    def __args_has_tracepoint_events(cls, args: list[str]) -> bool:
+        # get all arguments that are preceded with either
+        # -e or --event
+        events = [
+            args[idx + 1]
+            # for all elements except the last one.
+            for idx, arg in enumerate(args[:-1])
+            if arg in ("-e", "--event")
+        ]
+
+        # Also support --event=<event>.
+        events.extend(arg.removeprefix("--event=") for arg in args if arg.startswith("--event="))
+        # Also support the attached short form: -e<event>.
+        events.extend(
+            arg.removeprefix("-e") for arg in args if arg.startswith("-e") and arg != "-e"
+        )
+        # existing event modifiers from perf doc
+        event_modifiers = set("ukhIGHpPSDWebRX")
+
+        return any(
+            # Split the event into its colon-separated components.
+            # Examples:
+            #   cycles:u                 -> ["cycles", "u"]
+            #   sched:sched_switch       -> ["sched", "sched_switch"]
+            #   sched:sched_switch:u     -> ["sched", "sched_switch", "u"]
+            (
+                # If there are more than two components, this cannot be a regular
+                # event with modifiers (e.g. cycles:u); it is a tracepoint with
+                # one or more modifiers.
+                len(parts := event.split(":")) > 2
+                # Two components can either be:
+                #   event:modifier         (e.g. cycles:u)
+                #   subsystem:tracepoint   (e.g. sched:sched_switch)
+                #
+                # If the second component is not exclusively made up of documented
+                # perf event modifier characters, treat it as a tracepoint name.
+                or (len(parts) == 2 and not set(parts[1]) <= event_modifiers)
+            )
+            for event_selector in events
+            # split by comma for cases like cycles:k,cycles:u
+            for event in event_selector.split(",")
+        )
+
+    @classmethod
+    def __sanitize_args(cls, args: list[str]) -> list[str]:
+        # We do not need to sanitize if none of the events
+        # is a tracepoint event.
+        if not cls.__args_has_tracepoint_events(args):
+            return args
+
+        sanitized_args: list[str] = args.copy()
+
+        # These arguments are incompatible with tracepoint events.
+        incompatible_args = [  # keep the list ordered
+            (
+                "-F",
+                False,
+            ),  # False means look for arguments that are exact match of this, and drop the arg that follows
+            # Remove the attached form, such as "-F99".
+            # This must come after the exact "-F" entry.
+            ("-F", True),
+            (
+                "--freq=",
+                True,
+            ),  # True means look for arguments that start with this, and don't drop the arg that follows
+            ("--freq", False),
+        ]
+
+        for arg, starts_with in incompatible_args:
+            # we do it in a loop, because same argument might be
+            # added multiple times, so we want to get rid of all occurrences
+            while True:
+                if starts_with:
+                    idx = next(
+                        (i for i, item in enumerate(sanitized_args) if item.startswith(arg)),
+                        None,
+                    )
+                    if idx is None:
+                        break
+                    del sanitized_args[idx]
+                else:
+                    if arg not in sanitized_args:
+                        break
+                    idx = sanitized_args.index(arg)
+                    del sanitized_args[idx : min(idx + 2, len(sanitized_args))]
+
+                bm_log(
+                    f"Given argument {arg} was removed from perf args. "
+                    "It is incompatible with tracepoint events.",
+                    LogType.WARNING,
+                )
+
+        return sanitized_args
 
     @classmethod
     def perf_events(cls) -> list[str]:
