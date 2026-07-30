@@ -61,4 +61,4 @@ compgen -G "${DIR_PROG_ABS}/*.prog" >/dev/null || {
   echo "Trace translation produced no syzlang programs." >&2
   exit 1
 }
-./helper/compare_strace_to_syzprog.sh "${DIR_PROG_ABS}"
+./helper/compare_strace_to_syzprog.sh "${TRACE_ABS}" "${DIR_PROG_ABS}"
