@@ -48,9 +48,10 @@ num_hist_out=`cat ${FILE_FREQ_OUT} | wc -l`
 cat "${FILE_FREQ_IN}" | cut -f 1 | sort > "${FILE_NAMES_IN}"
 cat "${FILE_FREQ_OUT}" | cut -f 1 | sort > "${FILE_NAMES_OUT}"
 
-echo "Unique syscall names (strace/generated syzlang): (${num_hist_in}/${num_hist_out}) - $(calc_percent ${num_hist_in} ${num_hist_out})% represented by direct name"
-
 num_names_absent=`comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | wc -l`
+num_names_represented=$((${num_hist_in}-${num_names_absent}))
+echo "Unique strace syscall names represented by direct name: ${num_names_represented}/${num_hist_in} - $(calc_percent ${num_hist_in} ${num_names_represented})%"
+
 if [ ${num_names_absent} -gt 0 ]; then
   echo "${num_names_absent} unique strace syscall names are absent by direct name from the generated syzlang programs"
   comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | sed 's/^/  /'
