@@ -3,7 +3,7 @@
 CSB generator found in bm-generator is a tool that extends [syzkaller][] and uses [tmplr][] to auto-generate benchmarks and JSON configuration files
 compatible with the CSB framework [bm-runner][].
 
-The generator takes a [strace][] log file as input.
+The generator takes an [strace][] log file as an input.
 
 ## Disclaimer
 This tool is currently experimental and still in the prototype phase.
@@ -13,13 +13,13 @@ will be run and analyzed.
 
 ## Requirements
 
-### Install Go
+### Install golang
 
-[syzkaller][] requires Go 1.25.x or newer.
+[syzkaller][] requires golang of version 1.25.x to be installed.
 
-The `golang-go` package shipped by Ubuntu 22.04 is too old for this workflow.
+Critically, on Ubuntu 22.04, `apt install golang-go` uses version 18.1 which *does not* work.
 
-You can install [Go][] as follows:
+You can install [golang][] as follows:
 ```bash
 cd bm-generator/helper/
 ./install_go.sh
@@ -50,7 +50,7 @@ go version
   ```bash
   rm -rf /usr/local/go
   ```
-3. Download Go from the official website:
+3. Download golong from the official website:
 ```bash
 wget https://go.dev/dl/go1.25.5.linux-amd64.tar.gz
 ```
@@ -81,17 +81,15 @@ the following scripts within `bm-generator/`:
 
 |Script|Description|
 |---|---|
-|`00_init.sh`| Checks that Go 1.25 or newer is available and offers to install it when it is missing. |
-|`01_build.sh`| Configures the CSB build when necessary and builds the required syzkaller tools. |
-|`02_parse.sh`| Translates one strace log into [syzlang][] programs stored directly in `deserialized/*.prog`, then prints translation coverage. With a report-capable `syz-trace2syz`, it also stores `deserialized/translation_report.txt`. |
-|`03_extract.sh`| Extracts dependency-preserving programs from each `deserialized/*.prog` input. Results are stored below a numbered directory per input, such as `extracted/0/*.prog`. |
-|`04_prepare.sh`| Recursively converts `extracted/**/*.prog` into CSB headers under `../bench/targets/<group>/syz/`. |
-|`05_generate.sh`| Uses [tmplr][] to generate bm-runner-compatible wrapper headers in `../bench/targets/<group>/` and flamegraph JSON configurations in `../config/<group>/`. |
-|`06_select.sh`| Runs the generated flamegraph configurations briefly, compares their flamegraphs, and writes the selected benchmark set and merged output under `../bench-select/`. |
-|`99_clean.sh`| Shows generated headers and configurations that can be removed, then asks for confirmation. `-f` skips confirmation and `-a` also includes intermediate and build directories. |
+|`00_init.sh`| Checks and possibly updates/installs golang as well as cloning the syzkaller repository. |
+|`01_build.sh`| Builds the syzkaller tools necessary to automatically generate test cases from strace logs. |
+|`02_parse.sh`| Parses an strace log file into the [syzlang][] internal representation of syzkaller. It outputs one [syzlang][] program for each strace log file. Output is stored in `deserialized/0/program_<id1>.prog` |
+|`03_extract.sh`| Analyzes all `deserialized/*/*.prog` [syzlang][] programs. For each input program, a dependency graph for all syscalls is computed. It outputs one [syzlang][] program per dependency graph into `extracted/min_<id2>.prog` |
+|`04_prepare.sh`| Processes all `extracted/*.prog` [syzlang][] programs. Each input program is converted into a C header containing a function calling all dependent syscalls from the input [syzlang][] program. Output is stored in `../bench/targets/gen-ws/syz/min_<id3>.h` |
+|`05_generate.sh`| Uses [tmplr][] to generate [bm-runner][] compatible headers and JSON configuration for all generated `../bench/targets/gen-ws/syz/min_<id3>.h` files. Output is stored as `../bench/targets/gen-ws/min_<id3>.h` header and `../../config/gen-ws/fg_min_<id3>.json`. |
+|`06_select.sh`| Runs all the auto-generated benchmarks for a short duration, performs pairwise comparison of the flamegraphs of the benchmark execution, and prints a list of benchmarks that are different enough from each other. |
 
-Of the numbered generation stages, only `02_parse.sh` requires a positional
-argument: the path to an strace log generated as described below.
+The only script that takes an argument is `02_parse.sh`, which needs a path to an strace log file generated as described below.
 ```bash
 ./02_parse.sh </path/to/strace.log>
 ```
@@ -102,11 +100,10 @@ Use the following [strace][] command to collect `strace.log`.
 
 _Note: replace `<app-binary>` with the name of your binary/application including all necessary arguments._
 
-Install `strace` with your distribution's package manager before collecting a
-trace.
+_Note: strace must be previously installed using the command `dnf install strace`._
 
 ```bash
-../scripts/plugins/collect_strace.sh strace.log <app-binary> [arguments...]
+./scripts/collect_strace.sh strace.log <app-binary>
 ```
 
 Alternatively:
@@ -128,16 +125,10 @@ cd bm-generator/
 ./06_select.sh
 ```
 
-`02_parse.sh` refuses to write into a non-empty deserialization directory, and
-`06_select.sh` refuses to overwrite an existing result group. `04_prepare.sh`
-warns when the target directory already exists because mixing generated sets can
-produce misleading results. Use `./99_clean.sh` to inspect the generated paths
-before removing them; add `-a` to include intermediate and build directories.
-
-The default group is `gen-ws`. To generate another group, set
-`CSB_RESULTS_GROUP` before `01_build.sh` configures CMake and keep it set for
-stages 04 through 06. The extraction stage can also be tuned with `MINCALLS`
-(default 10) and `JOBS` (default number of processors).
+Generator scripts intentionally fail on non-empty output directories. This is a
+guard against accidentally mixing generated benchmark sets; remove or rename the
+existing output directory before regenerating unless intentionally debugging the
+generator.
 
 ## CSB syzkaller fork
 
@@ -145,8 +136,7 @@ The CSB syzkaller fork extends upstream syzkaller primarily in these areas:
 
 - `tools/syz-trace2syz/`: strace parsing and `.prog` serialization. Notable
   flags include `-deserialize`, `-nocorpus`, `-topCalls`, `-splitThreads`, and
-  `-argLength`. Deserialization also writes `translation_report.txt` with
-  syscall coverage and exact source-to-helper mappings.
+  `-argLength`.
 - `prog/`: serialization/deserialization and CSB-specific annotations such as
   strace TIDs, return values, clone/resource annotations, and dependency
   minimization helpers.
@@ -181,10 +171,10 @@ The benchmarks generated by bm-generator may contain redundancy: for example, sy
 To filter out such benchmarks, we introduce a pipeline based on flamegraph difference calculation:
 - For each benchmark, the flamegraph is recorded and post-processed (see details below).
 - Each of the collapsed stacks of the flamegraph is passed to `diffolded.pl` to calculate the difference of flamegraphs, and the maximum detected difference for a single stack (in either diff direction) is reported.
-- Benchmarks which differ from each other by less than a certain threshold are considered to be the same, and only one of them is kept.
+- Benchmarks which differ from each other by less than a certain threshold, are considered to be the same, and only of them is kept, while others are ignored.
 
 Before passing the stacks to the `difffolded.pl` the flamegraph is postprocessed: in particular, the userspace stacks are dropped from the flamegraph, and only kernel stacks are kept.
-Furthermore, the name of the benchmark application is replaced with a generic one. This works around a `difffolded.pl` limitation that permits calculating the difference only for applications with the same name.
+Futhermore, the name of the benchmark application is replaced with a generic one: this allows side-stepping `difffolded.pl` limitation that permits calculation of the diff only for the applications with the same name.
 This directly allows comparing the postprocessed flamegraphs of the autogenerated microbenchmarks with each other as well as with the postprocessed flamegraph of the original application.
 
 To run the benchmarks selection pipeline after generation of the microbenchmarks, you can run:
@@ -206,21 +196,22 @@ In case no config files are provided, no new benchmarks are executed and only th
 
 The output of the script is a list of benchmark names that are distinct from each other, according to the flamegraph difference criterion.
 
-## Translation coverage
+## Excluded syscalls for bm-generator
 
-Translation support depends on the trace contents, target architecture, and
-syzkaller revision, so a static excluded-syscall list quickly becomes stale.
-After parsing, `02_parse.sh` reports the input syscall names and calls, direct
-syzlang translations, calls represented by CSB helper functions, and calls that
-were not translated. Exact source-syscall-to-helper mappings are included when
-helpers are used. The machine-readable source is
-`deserialized/translation_report.txt`.
+The following list of syscalls is parsed by bm-generator, but excluded from [syzlang][] program generation.
 
-When the installed `syz-trace2syz` does not produce that report, the helper
-falls back to comparing direct syscall names in the strace and generated
-programs. This compatibility mode cannot account for calls implemented by CSB
-helper functions, so use the report-capable syzkaller revision for complete
-coverage statistics.
+|Syscall|Reason|
+|---|---|
+|execve|Replaces actual benchmark program|
+|arch_prctl|Unsafe to set process properties|
+|wait, wait4, clone, futex|Multithreaded tests are not supported|
+|mmap, msync, mremap, mprotect, madvise, munmap | Might interfere with mmap'ed memory for test |
+|rt_sig* |Sigset cannot be evaluated, yet|
+|rt_sigaction|Function pointers are not recovered by strace|
+|set_robust_list, set_tid_address|Glibc issued calls mostly uninteresting|
+|io_setup, io_getevents, io_* |AOI syscalls are paired by resources passed in memory pointers (io_ctx), not supported yet.|
+|write|Supported, but if used on file descriptor 1 or 2 (stdout, stderr) these are dropped to avoid output parsing issues|
+|read|Supported, but if used on file descriptor 0 (stdin) these are dropped to avoid blocking|
 
 
 ## Generating JSON files
@@ -246,7 +237,7 @@ the template name matches `*single*.json.in`
 
 [strace]: https://github.com/strace/strace
 [tmplr]: https://github.com/open-s4c/tmplr
-[syzkaller]: https://github.com/open-s4c/syzkaller/tree/s4c/csb-dev
-[bm-runner]: bm-runner.md
-[Go]: https://go.dev/doc/install
+[syzkaller]: https://github.com/open-s4c/syzkaller/tree/s4c/
+[bm-runner]: doc/bm-runner.md
+[golang]: https://go.dev/doc/install
 [syzlang]: https://github.com/google/syzkaller/blob/master/docs/syscall_descriptions_syntax.md
