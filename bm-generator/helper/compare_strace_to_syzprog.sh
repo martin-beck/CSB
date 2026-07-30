@@ -42,10 +42,11 @@ num_hist_out=`cat ${FILE_FREQ_OUT} | wc -l`
 cat "${FILE_FREQ_IN}" | cut -f 1 | sort > "${FILE_NAMES_IN}"
 cat "${FILE_FREQ_OUT}" | cut -f 1 | sort > "${FILE_NAMES_OUT}"
 
-echo "Number of unique syscalls (in/out): (${num_hist_in}/${num_hist_out}) - $(calc_percent ${num_hist_in} ${num_hist_out})% kept"
+echo "Unique syscall names (strace/generated syzlang): (${num_hist_in}/${num_hist_out}) - $(calc_percent ${num_hist_in} ${num_hist_out})% represented by direct name"
 
-if [ ${num_hist_in} -gt ${num_hist_out} ]; then
-  echo "Lost $((${num_hist_in}-${num_hist_out})) syscalls during translation"
+num_names_absent=`comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | wc -l`
+if [ ${num_names_absent} -gt 0 ]; then
+  echo "${num_names_absent} unique strace syscall names are absent by direct name from the generated syzlang programs"
   comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | sed 's/^/  /'
 fi
 
@@ -53,7 +54,7 @@ fi
 total_in=`cat ${FILE_FREQ_IN} | cut -f 2 | tr '\n' '+' | sed 's/+$/\n/'| bc`
 total_out=`cat ${FILE_FREQ_OUT} | cut -f 2 | tr '\n' '+' | sed 's/+$/\n/'| bc`
 
-echo "Total number of syscalls (in/out): (${total_in}/${total_out}) - $(calc_percent ${total_in} ${total_out})% kept"
+echo "Raw syscall call counts (strace/generated syzlang): (${total_in}/${total_out}) - $(calc_percent ${total_in} ${total_out})% call-count ratio (not translation coverage)"
 
 
 # Compute Earth mover distance
