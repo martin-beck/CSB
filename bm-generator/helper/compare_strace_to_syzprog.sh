@@ -39,45 +39,53 @@ cat "${TRACE}" | grep -vF '<...' | grep -vF -- '---' | grep -vF -- '+++' | sed '
 cat "${DIR_PROG}/"*.prog | sed 's/^<[0-9]\+>//' | sed 's/^r.* = //' | cut -d '(' -f 1 | cut -d '$' -f 1 | sort | uniq -c | sed 's/^ *//' | sed 's/^\(.*\) \(.*\)$/\2\t\1/' > "${FILE_FREQ_OUT}"
 
 # Expand generated replay helpers into the kernel syscalls they represent. The
-# mapping mirrors syzkaller's Linux PseudoSyscallDeps metadata.
+# mapping is read from syzkaller so newly added helpers are included.
+SCRIPT_SYZ_SRC="helper/find_syzkaller_src.sh"
+: ${DIR_SYZ_SRC:=$(${SCRIPT_SYZ_SRC})}
+FILE_SYZ_TARGETS="${DIR_SYZ_SRC}/sys/targets/targets.go"
+if [ ! -f "${FILE_SYZ_TARGETS}" ]; then
+  echo "syzkaller target metadata not found: ${FILE_SYZ_TARGETS}" >&2
+  exit 1
+fi
+
+FILE_HELPER_DEPS=`mktemp`
+trap 'rm -f "${FILE_HELPER_DEPS}"' EXIT
+awk '
+  /PseudoSyscallDeps: map\[string\]\[\]string{/ { in_map = 1; next }
+  in_map && /^[[:space:]]*},/ { exit }
+  in_map && /^[[:space:]]*"/ {
+    line = $0
+    sub(/^[[:space:]]*"/, "", line)
+    helper = line
+    sub(/".*/, "", helper)
+    sub(/^[^:]*:[[:space:]]*{/, "", line)
+    sub(/}.*/, "", line)
+    count = split(line, deps, ",")
+    for (i = 1; i <= count; i++) {
+      gsub(/["[:space:]]/, "", deps[i])
+      if (deps[i] != "")
+        print helper "\t" deps[i]
+    }
+  }
+' "${FILE_SYZ_TARGETS}" > "${FILE_HELPER_DEPS}"
+
 : > "${FILE_FREQ_OUT_SUPPORTED}"
 : > "${FILE_FREQ_OUT_HELPERS}"
 awk -F '\t' '
-  function add_helpers(names, count,    parts, num, i) {
-    num = split(names, parts, ",")
-    for (i = 1; i <= num; i++) {
-      represented[parts[i]] += count
-      helpers[parts[i]] += count
-    }
-  }
-  function expand_helper(name, count) {
-    if (name == "syz_csb_execve")             add_helpers("execve,exit,wait4", count)
-    else if (name == "syz_csb_execveat")      add_helpers("execveat,exit,wait4", count)
-    else if (name == "syz_csb_fexecve")       add_helpers("execveat,exit,openat,wait4", count)
-    else if (name == "syz_csb_io_setup")      add_helpers("io_setup,io_destroy", count)
-    else if (name == "syz_csb_io_getevents")  add_helpers("io_setup,io_getevents,io_destroy", count)
-    else if (name == "syz_csb_io_pgetevents") add_helpers("io_setup,io_pgetevents,io_destroy", count)
-    else if (name == "syz_csb_io_destroy")    add_helpers("io_setup,io_destroy", count)
-    else if (name == "syz_csb_io_submit")     add_helpers("io_setup,io_submit,io_getevents,io_destroy", count)
-    else if (name == "syz_csb_io_cancel")     add_helpers("io_setup,io_submit,io_cancel,io_destroy", count)
-    else if (name == "syz_csb_exit")          add_helpers("clone,exit,wait4", count)
-    else if (name == "syz_csb_exit_group")    add_helpers("clone,exit_group,wait4", count)
-    else if (name == "syz_csb_rt_sigaction")  add_helpers("rt_sigaction", count)
-    else if (name == "syz_csb_rt_sigreturn")  add_helpers("rt_sigaction,rt_sigreturn,tgkill", count)
-    else if (name == "syz_csb_rt_sigqueueinfo") add_helpers("rt_sigaction,rt_sigqueueinfo", count)
-    else if (name == "syz_csb_rt_sigsuspend") add_helpers("rt_sigaction,rt_tgsigqueueinfo,rt_sigsuspend", count)
-    else if (name == "syz_csb_thread_create_join") add_helpers("clone,exit", count)
-    else if (name == "syz_csb_fork_wait" || name == "syz_csb_vfork_wait") add_helpers("clone,exit,wait4", count)
-    else if (name == "syz_reapply_affinity")  add_helpers("sched_setaffinity", count)
-    else if (name == "syz_clone")             add_helpers("clone,exit", count)
-    else if (name == "syz_clone3")            add_helpers("clone3,exit", count)
-    else if (name == "syz_pidfd_open")        add_helpers("pidfd_open", count)
-    else if (name == "syz_io_uring_setup")    add_helpers("io_uring_setup", count)
-    else return 0
-    return 1
+  NR == FNR {
+    helper_deps[$1] = helper_deps[$1] " " $2
+    next
   }
   {
-    if (!expand_helper($1, $2) && $1 !~ /^syz_/) {
+    if ($1 in helper_deps) {
+      count = split(helper_deps[$1], deps, " ")
+      for (i = 1; i <= count; i++) {
+        if (deps[i] == "")
+          continue
+        represented[deps[i]] += $2
+        helpers[deps[i]] += $2
+      }
+    } else if ($1 !~ /^syz_/) {
       represented[$1] += $2
     }
   }
@@ -87,7 +95,7 @@ awk -F '\t' '
     for (syscall in helpers)
       print syscall "\t" helpers[syscall] > helpers_file
   }
-' supported_file="${FILE_FREQ_OUT_SUPPORTED}" helpers_file="${FILE_FREQ_OUT_HELPERS}" "${FILE_FREQ_OUT}"
+' supported_file="${FILE_FREQ_OUT_SUPPORTED}" helpers_file="${FILE_FREQ_OUT_HELPERS}" "${FILE_HELPER_DEPS}" "${FILE_FREQ_OUT}"
 sort -o "${FILE_FREQ_OUT_SUPPORTED}" "${FILE_FREQ_OUT_SUPPORTED}"
 sort -o "${FILE_FREQ_OUT_HELPERS}" "${FILE_FREQ_OUT_HELPERS}"
 

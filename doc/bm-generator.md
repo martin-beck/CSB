@@ -106,13 +106,6 @@ _Note: strace must be previously installed using the command `dnf install strace
 ./scripts/collect_strace.sh strace.log <app-binary>
 ```
 
-The parse-stage syscall comparison reports both directly generated syscalls and
-source syscalls represented by CSB replay helpers. It writes the raw syzlang
-histogram to `frequency_out.log`, the normalized syscall-support histogram to
-`frequency_out_supported.log`, and helper-represented syscall counts to
-`frequency_out_helpers.log`. Absent-name and output call totals use the
-normalized histogram.
-
 Alternatively:
 
 ```bash
