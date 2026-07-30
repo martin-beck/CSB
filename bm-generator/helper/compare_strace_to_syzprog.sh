@@ -8,6 +8,8 @@ if [ $# -ne 2 ]; then
   exit 1
 fi
 
+export LC_ALL=C
+
 # calculates the precentage like 100*$2/$1 with $3 number of digits (2 if $3 is empty)
 calc_percent() {
   a=$1
@@ -29,6 +31,7 @@ FILE_FREQ_OUT_HELPERS="${DIR_PROG}/frequency_out_helpers.log"
 
 FILE_NAMES_IN="${DIR_PROG}/syscall_names_in.log"
 FILE_NAMES_OUT="${DIR_PROG}/syscall_names_out.log"
+FILE_NAMES_GENERATED="${DIR_PROG}/syscall_names_generated.log"
 
 # Generate strace log input frequencies
 
@@ -36,7 +39,7 @@ cat "${TRACE}" | grep -vF '<...' | grep -vF -- '---' | grep -vF -- '+++' | sed '
 
 # Generate prog output frequencies
 
-cat "${DIR_PROG}/"*.prog | sed 's/^<[0-9]\+>//' | sed 's/^r.* = //' | cut -d '(' -f 1 | cut -d '$' -f 1 | sort | uniq -c | sed 's/^ *//' | sed 's/^\(.*\) \(.*\)$/\2\t\1/' > "${FILE_FREQ_OUT}"
+cat "${DIR_PROG}/"*.prog | sed 's/^<[0-9]\+>//' | sed 's/^r.* = //' | grep -vE '^(#|$)' | cut -d '(' -f 1 | cut -d '$' -f 1 | sort | uniq -c | sed 's/^ *//' | sed 's/^\(.*\) \(.*\)$/\2\t\1/' > "${FILE_FREQ_OUT}"
 
 # Expand generated replay helpers into the kernel syscalls they represent. The
 # mapping is read from syzkaller so newly added helpers are included.
@@ -104,6 +107,7 @@ num_hist_out=`cat ${FILE_FREQ_OUT_SUPPORTED} | wc -l`
 
 cat "${FILE_FREQ_IN}" | cut -f 1 | sort > "${FILE_NAMES_IN}"
 cat "${FILE_FREQ_OUT_SUPPORTED}" | cut -f 1 > "${FILE_NAMES_OUT}"
+cat "${FILE_FREQ_OUT}" | cut -f 1 | sort > "${FILE_NAMES_GENERATED}"
 
 num_names_absent=`comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | wc -l`
 num_names_represented=$((${num_hist_in}-${num_names_absent}))
@@ -111,10 +115,21 @@ num_names_represented=$((${num_hist_in}-${num_names_absent}))
 echo "Unique syscall names (strace/generated support set): (${num_hist_in}/${num_hist_out})"
 echo "Input syscall-name coverage: (${num_hist_in}/${num_names_represented}) - $(calc_percent ${num_hist_in} ${num_names_represented})% represented"
 
-if [ -s "${FILE_FREQ_OUT_HELPERS}" ]; then
-  num_helper_names=`wc -l < "${FILE_FREQ_OUT_HELPERS}"`
-  echo "Unique syscall names represented by generated helpers (${num_helper_names}):"
-  cut -f 1 "${FILE_FREQ_OUT_HELPERS}" | sed 's/^/  /'
+num_generated_helpers=`awk -F '\t' '$1 ~ /^syz_/ {count++} END {print count + 0}' "${FILE_FREQ_OUT}"`
+if [ ${num_generated_helpers} -gt 0 ]; then
+  echo "Generated syzlang helpers (${num_generated_helpers}):"
+  awk -F '\t' '
+    NR == FNR {
+      dependencies[$1] = dependencies[$1] " " $2
+      next
+    }
+    $1 ~ /^syz_/ {
+      if ($1 in dependencies)
+        print "  " $1 " (" $2 " calls):" dependencies[$1]
+      else
+        print "  " $1 " (" $2 " calls): no declared syscall dependencies"
+    }
+  ' "${FILE_HELPER_DEPS}" "${FILE_FREQ_OUT}"
 fi
 
 echo "${num_names_absent} unique strace syscall names are absent from the generated syzlang programs"
@@ -122,11 +137,19 @@ if [ ${num_names_absent} -gt 0 ]; then
   comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | sed 's/^/  /'
 fi
 
-# Total number of instances of syscalls
-total_in=`cat ${FILE_FREQ_IN} | cut -f 2 | tr '\n' '+' | sed 's/+$/\n/'| bc`
-total_out=`cat ${FILE_FREQ_OUT_SUPPORTED} | cut -f 2 | tr '\n' '+' | sed 's/+$/\n/'| bc`
+num_names_generated_only=`comm -13 "${FILE_NAMES_IN}" "${FILE_NAMES_GENERATED}" | wc -l`
+if [ ${num_names_generated_only} -gt 0 ]; then
+  echo "${num_names_generated_only} generated syzlang call names, including helpers, are absent by direct name from the strace input"
+  comm -13 "${FILE_NAMES_IN}" "${FILE_NAMES_GENERATED}" | sed 's/^/  /'
+fi
 
-echo "Syscall call counts (strace/generated, including helper-represented calls): (${total_in}/${total_out}) - $(calc_percent ${total_in} ${total_out})% call-count ratio"
+# Total number of instances of syscalls
+total_in=`awk -F '\t' '{sum += $2} END {print sum + 0}' "${FILE_FREQ_IN}"`
+total_out=`awk -F '\t' '{sum += $2} END {print sum + 0}' "${FILE_FREQ_OUT}"`
+total_supported=`awk -F '\t' '{sum += $2} END {print sum + 0}' "${FILE_FREQ_OUT_SUPPORTED}"`
+
+echo "Raw syscall call counts (strace/generated syzlang): (${total_in}/${total_out}) - $(calc_percent ${total_in} ${total_out})% call-count ratio (not translation coverage)"
+echo "Represented syscall call counts (strace/generated support set): (${total_in}/${total_supported}) - $(calc_percent ${total_in} ${total_supported})% call-count ratio"
 
 
 # Compute Earth mover distance
