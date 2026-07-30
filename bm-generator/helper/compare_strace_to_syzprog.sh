@@ -24,6 +24,8 @@ DIR_PROG="$2"
 
 FILE_FREQ_IN="${DIR_PROG}/frequency_in.log"
 FILE_FREQ_OUT="${DIR_PROG}/frequency_out.log"
+FILE_FREQ_OUT_SUPPORTED="${DIR_PROG}/frequency_out_supported.log"
+FILE_FREQ_OUT_HELPERS="${DIR_PROG}/frequency_out_helpers.log"
 
 FILE_NAMES_IN="${DIR_PROG}/syscall_names_in.log"
 FILE_NAMES_OUT="${DIR_PROG}/syscall_names_out.log"
@@ -36,25 +38,87 @@ cat "${TRACE}" | grep -vF '<...' | grep -vF -- '---' | grep -vF -- '+++' | sed '
 
 cat "${DIR_PROG}/"*.prog | sed 's/^<[0-9]\+>//' | sed 's/^r.* = //' | cut -d '(' -f 1 | cut -d '$' -f 1 | sort | uniq -c | sed 's/^ *//' | sed 's/^\(.*\) \(.*\)$/\2\t\1/' > "${FILE_FREQ_OUT}"
 
+# Expand generated replay helpers into the kernel syscalls they represent. The
+# mapping mirrors syzkaller's Linux PseudoSyscallDeps metadata.
+: > "${FILE_FREQ_OUT_SUPPORTED}"
+: > "${FILE_FREQ_OUT_HELPERS}"
+awk -F '\t' '
+  function add_helpers(names, count,    parts, num, i) {
+    num = split(names, parts, ",")
+    for (i = 1; i <= num; i++) {
+      represented[parts[i]] += count
+      helpers[parts[i]] += count
+    }
+  }
+  function expand_helper(name, count) {
+    if (name == "syz_csb_execve")             add_helpers("execve,exit,wait4", count)
+    else if (name == "syz_csb_execveat")      add_helpers("execveat,exit,wait4", count)
+    else if (name == "syz_csb_fexecve")       add_helpers("execveat,exit,openat,wait4", count)
+    else if (name == "syz_csb_io_setup")      add_helpers("io_setup,io_destroy", count)
+    else if (name == "syz_csb_io_getevents")  add_helpers("io_setup,io_getevents,io_destroy", count)
+    else if (name == "syz_csb_io_pgetevents") add_helpers("io_setup,io_pgetevents,io_destroy", count)
+    else if (name == "syz_csb_io_destroy")    add_helpers("io_setup,io_destroy", count)
+    else if (name == "syz_csb_io_submit")     add_helpers("io_setup,io_submit,io_getevents,io_destroy", count)
+    else if (name == "syz_csb_io_cancel")     add_helpers("io_setup,io_submit,io_cancel,io_destroy", count)
+    else if (name == "syz_csb_exit")          add_helpers("clone,exit,wait4", count)
+    else if (name == "syz_csb_exit_group")    add_helpers("clone,exit_group,wait4", count)
+    else if (name == "syz_csb_rt_sigaction")  add_helpers("rt_sigaction", count)
+    else if (name == "syz_csb_rt_sigreturn")  add_helpers("rt_sigaction,rt_sigreturn,tgkill", count)
+    else if (name == "syz_csb_rt_sigqueueinfo") add_helpers("rt_sigaction,rt_sigqueueinfo", count)
+    else if (name == "syz_csb_rt_sigsuspend") add_helpers("rt_sigaction,rt_tgsigqueueinfo,rt_sigsuspend", count)
+    else if (name == "syz_csb_thread_create_join") add_helpers("clone,exit", count)
+    else if (name == "syz_csb_fork_wait" || name == "syz_csb_vfork_wait") add_helpers("clone,exit,wait4", count)
+    else if (name == "syz_reapply_affinity")  add_helpers("sched_setaffinity", count)
+    else if (name == "syz_clone")             add_helpers("clone,exit", count)
+    else if (name == "syz_clone3")            add_helpers("clone3,exit", count)
+    else if (name == "syz_pidfd_open")        add_helpers("pidfd_open", count)
+    else if (name == "syz_io_uring_setup")    add_helpers("io_uring_setup", count)
+    else return 0
+    return 1
+  }
+  {
+    if (!expand_helper($1, $2) && $1 !~ /^syz_/) {
+      represented[$1] += $2
+    }
+  }
+  END {
+    for (syscall in represented)
+      print syscall "\t" represented[syscall] > supported_file
+    for (syscall in helpers)
+      print syscall "\t" helpers[syscall] > helpers_file
+  }
+' supported_file="${FILE_FREQ_OUT_SUPPORTED}" helpers_file="${FILE_FREQ_OUT_HELPERS}" "${FILE_FREQ_OUT}"
+sort -o "${FILE_FREQ_OUT_SUPPORTED}" "${FILE_FREQ_OUT_SUPPORTED}"
+sort -o "${FILE_FREQ_OUT_HELPERS}" "${FILE_FREQ_OUT_HELPERS}"
+
 num_hist_in=`cat ${FILE_FREQ_IN} | wc -l`
-num_hist_out=`cat ${FILE_FREQ_OUT} | wc -l`
+num_hist_out=`cat ${FILE_FREQ_OUT_SUPPORTED} | wc -l`
 
 cat "${FILE_FREQ_IN}" | cut -f 1 | sort > "${FILE_NAMES_IN}"
-cat "${FILE_FREQ_OUT}" | cut -f 1 | sort > "${FILE_NAMES_OUT}"
-
-echo "Unique syscall names (strace/generated syzlang): (${num_hist_in}/${num_hist_out}) - $(calc_percent ${num_hist_in} ${num_hist_out})% represented by direct name"
+cat "${FILE_FREQ_OUT_SUPPORTED}" | cut -f 1 > "${FILE_NAMES_OUT}"
 
 num_names_absent=`comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | wc -l`
+num_names_represented=$((${num_hist_in}-${num_names_absent}))
+
+echo "Unique syscall names (strace/generated support set): (${num_hist_in}/${num_hist_out})"
+echo "Input syscall-name coverage: (${num_hist_in}/${num_names_represented}) - $(calc_percent ${num_hist_in} ${num_names_represented})% represented"
+
+if [ -s "${FILE_FREQ_OUT_HELPERS}" ]; then
+  num_helper_names=`wc -l < "${FILE_FREQ_OUT_HELPERS}"`
+  echo "Unique syscall names represented by generated helpers (${num_helper_names}):"
+  cut -f 1 "${FILE_FREQ_OUT_HELPERS}" | sed 's/^/  /'
+fi
+
+echo "${num_names_absent} unique strace syscall names are absent from the generated syzlang programs"
 if [ ${num_names_absent} -gt 0 ]; then
-  echo "${num_names_absent} unique strace syscall names are absent by direct name from the generated syzlang programs"
   comm -23 "${FILE_NAMES_IN}" "${FILE_NAMES_OUT}" | sed 's/^/  /'
 fi
 
 # Total number of instances of syscalls
 total_in=`cat ${FILE_FREQ_IN} | cut -f 2 | tr '\n' '+' | sed 's/+$/\n/'| bc`
-total_out=`cat ${FILE_FREQ_OUT} | cut -f 2 | tr '\n' '+' | sed 's/+$/\n/'| bc`
+total_out=`cat ${FILE_FREQ_OUT_SUPPORTED} | cut -f 2 | tr '\n' '+' | sed 's/+$/\n/'| bc`
 
-echo "Raw syscall call counts (strace/generated syzlang): (${total_in}/${total_out}) - $(calc_percent ${total_in} ${total_out})% call-count ratio (not translation coverage)"
+echo "Syscall call counts (strace/generated, including helper-represented calls): (${total_in}/${total_out}) - $(calc_percent ${total_in} ${total_out})% call-count ratio"
 
 
 # Compute Earth mover distance
@@ -63,7 +127,7 @@ if [ ${num_hist_in} -eq ${num_hist_out} ]; then
   i=0
   while [ $i -lt ${num_hist_in} ]; do
     cur_num_in=`head -n $(($i+1)) ${FILE_FREQ_IN} | tail -n 1 | cut -f 2`
-    cur_num_out=`head -n $(($i+1)) ${FILE_FREQ_OUT} | tail -n 1 | cut -f 2`
+    cur_num_out=`head -n $(($i+1)) ${FILE_FREQ_OUT_SUPPORTED} | tail -n 1 | cut -f 2`
     cur_diff=$((${cur_num_in}-${cur_num_out}))
     abs_diff=${cur_diff#-}
     EMD=$((${EMD} + ${abs_diff}))
@@ -74,4 +138,4 @@ fi
 
 # Info on visual meld diff
 echo "Check Distribution differences"
-echo "  meld ${FILE_FREQ_IN} ${FILE_FREQ_OUT}"
+echo "  meld ${FILE_FREQ_IN} ${FILE_FREQ_OUT_SUPPORTED}"
