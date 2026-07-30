@@ -136,7 +136,8 @@ The CSB syzkaller fork extends upstream syzkaller primarily in these areas:
 
 - `tools/syz-trace2syz/`: strace parsing and `.prog` serialization. Notable
   flags include `-deserialize`, `-nocorpus`, `-topCalls`, `-splitThreads`, and
-  `-argLength`.
+  `-argLength`. Deserialization also writes `translation_report.txt` with
+  syscall coverage and exact source-to-helper mappings.
 - `prog/`: serialization/deserialization and CSB-specific annotations such as
   strace TIDs, return values, clone/resource annotations, and dependency
   minimization helpers.
