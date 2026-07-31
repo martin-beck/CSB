@@ -84,7 +84,7 @@ foreach(HEADER ${HEADERS})
             else()
                 # otherwise set it to empty, and related section(s) will be
                 # turned off
-                set(META_NAME="")
+                set(META_NAME "")
             endif()
             set(TMPLR_PARAMS
                 -DPROBAVG="" -DPROBEND="1024"
