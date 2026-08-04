@@ -6,6 +6,8 @@ __pycache__/
 results/
 deserialized/
 extracted/
+reduced/
+multidiff/
 Testing/
 gen-ws
 bm-external/byte-unixbench
