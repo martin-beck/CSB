@@ -105,7 +105,7 @@ _Note: replace `<app-binary>` with the name of your binary/application including
 _Note: strace must be previously installed using the command `dnf install strace`._
 
 ```bash
-./scripts/collect_strace.sh strace.log <app-binary>
+./scripts/plugins/collect_strace.sh strace.log <app-binary>
 ```
 
 The collection helper also writes `strace.log.meta`. This sidecar records the
@@ -190,6 +190,10 @@ The CSB syzkaller fork extends upstream syzkaller primarily in these areas:
   minimization helpers.
 - `tools/syz-extraction/`: dependency minimization, poll filtering,
   deterministic TID iteration, and minimum call count filtering.
+- `tools/syz-prog-reduce`: motif based reduction of large extracted programs,
+  while keeping each syscall at least once
+- `tools/syz-multidiff`: classification of syzlang programs by similarity
+  (identical, change in constants, change in pointers, different)
 - `tools/syz-prog2c/` and `pkg/csource/`: C/CSB header generation, path, socket
   and file sanitization, file descriptor lifecycle handling, shared buffers,
   metadata, and CSB config output.
@@ -251,12 +255,13 @@ program generation.
 
 |Syscall|Reason|
 |---|---|
-|clone|Multithreaded tests are not supported|
-|execve|Replaces actual benchmark program|
+|exit, exit_group|Breaks CSB runner|
 |arch_prctl|No enabled syzkaller target description in the current generator target|
 |rt_sigreturn, rt_sigqueueinfo, rt_sigsuspend|Not supported: these require signal-frame state, deliver signals, or block|
 |rt_sigaction|Function pointers are not recovered by strace|
 |io_setup, io_getevents, io_*|AIO syscalls are paired by resources passed in memory pointers (`io_ctx`), which are not supported yet|
+|set_tid_address, set_robust_list|Breaks glibc thread teardown (join stalls)|
+|kill, tkill, tgkill|Signals are not properly supported yet, breaking CSB runner|
 |write on file descriptor 1 or 2|Writes to stdout and stderr are dropped to avoid output parsing issues|
 |read on file descriptor 0|Reads from stdin are dropped to avoid blocking|
 
