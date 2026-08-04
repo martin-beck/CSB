@@ -8,6 +8,10 @@ set(TMPLR_URL "${OPENS4C_URL}/tmplr/archive/refs/tags/v${TMPLR_VERSION}.tar.gz")
 set(TMPLR_SHA256
     "7f19dd58ccea737d9156f02167e2aa631218937195b3fbafe3475683bf9d888f")
 set(TMPLR_PROGRAM "${CMAKE_BINARY_DIR}/tmplr/tmplr")
+# Generated syzkaller benchmark identifiers can expand template lines beyond
+# tmplr's 256-byte default. Keep enough room for those substitutions.
+set(TMPLR_CFLAGS "-O3 -DMAX_SLEN=4096UL")
+find_program(TMPLR_MAKE_PROGRAM NAMES gmake make REQUIRED)
 
 ExternalProject_Add(
     tmplr-build
@@ -16,7 +20,7 @@ ExternalProject_Add(
     SOURCE_DIR "${CMAKE_BINARY_DIR}/tmplr"
     BINARY_DIR "${CMAKE_BINARY_DIR}/tmplr"
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND ${CMAKE_MAKE_COMMAND}
+    BUILD_COMMAND ${TMPLR_MAKE_PROGRAM} "CFLAGS=${TMPLR_CFLAGS}"
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS ${TMPLR_PROGRAM})
 
