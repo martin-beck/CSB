@@ -316,6 +316,8 @@ static inline bm_op_res_t bm_dispatch_operation(thread_ctx_t *ctx,
   res_all.op_count = 0;
   res_all.succ_count = 0;
   $_begin(NN = [[1; 2]]);
+  ctx->num_succeeded_NN_prog = 0;
+  ctx->num_failed_NN_prog = 0;
   bm_dispatch_operation_NN_prog(ctx, op_id);
   res_all.op_count += ctx->num_succeeded_NN_prog + ctx->num_failed_NN_prog;
   res_all.succ_count += ctx->num_succeeded_NN_prog;
