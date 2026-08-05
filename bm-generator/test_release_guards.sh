@@ -27,6 +27,9 @@ make_tool() {
 if grep -Eq 'file\(GLOB[[:space:]]+TEMPLATES' "$root/bm-generator/templates/CMakeLists.txt"; then
   fail "template generation still automatically includes archived templates"
 fi
+if grep -Eq 'char[[:space:]]+tmp\[[0-9]+\]' "$root/bm-generator/templates/syz_single.h.in"; then
+  fail "active template still truncates nested directory paths"
+fi
 
 # A failed parallel extraction worker must fail the stage.
 mkdir -p "$tmp/extract-in" "$tmp/extract-out" "$tmp/syz/bin"

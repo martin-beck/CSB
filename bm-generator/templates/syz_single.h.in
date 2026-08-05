@@ -63,12 +63,13 @@ $_end();
 
 $_begin(NN = [[1; 2]]);
 static inline void _mkdir_NN_prog(thread_ctx_t *ctx, const char *dir) {
-  char tmp[256] = {0};
+  if (dir == NULL || dir[0] == '\0')
+    return;
+  char *tmp = strdup(dir);
+  assert(tmp != NULL);
   char *p = NULL;
-  size_t len = 0;
+  size_t len = strlen(tmp);
 
-  snprintf(tmp, sizeof(tmp), "%s", dir);
-  len = strlen(tmp);
   if (tmp[len - 1] == '/')
     tmp[len - 1] = 0;
   for (p = tmp + 1; *p; p++)
@@ -78,6 +79,7 @@ static inline void _mkdir_NN_prog(thread_ctx_t *ctx, const char *dir) {
       *p = '/';
     }
   mkdirat(ctx->dirfd_NN_prog, tmp, S_IRWXU);
+  free(tmp);
 }
 
 static inline void init_subdirs_NN_prog(thread_ctx_t *ctx) {
