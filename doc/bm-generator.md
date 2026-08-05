@@ -178,6 +178,14 @@ guard against accidentally mixing generated benchmark sets; remove or rename the
 existing output directory before regenerating unless intentionally debugging the
 generator.
 
+The parallel extraction and header-generation stages also fail if any worker
+fails. Program files in nested directories must have unique basenames because
+the generated headers use those basenames as their output names.
+
+Only the active templates listed in `bm-generator/templates/CMakeLists.txt` are
+generation inputs. Versioned templates in that directory are retained as
+examples and are not included by the aggregate generation target.
+
 ## CSB syzkaller fork
 
 The CSB syzkaller fork extends upstream syzkaller primarily in these areas:

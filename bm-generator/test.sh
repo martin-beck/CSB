@@ -2,6 +2,7 @@
 # Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 # SPDX-License-Identifier: MIT
 set -e
+./test_release_guards.sh
 export CSB_RESULTS_GROUP="ls"
 source helper/bm-generator-lib.sh
 STRACE_LOG="ls_strace.log"

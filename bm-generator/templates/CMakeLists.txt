@@ -17,8 +17,13 @@ add_custom_command(
             json-format-apply
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
-# Find all single template files
-file(GLOB TEMPLATES *single*.in)
+# Keep archived/example templates out of generation. In particular,
+# syz_single_v2.0.1.h.in writes the same output as syz_single.h.in.
+set(TEMPLATES
+    "${CMAKE_CURRENT_SOURCE_DIR}/bm_single.json.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fg_single.json.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/syz_single.h.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/zoom_out_single.json.in")
 set(SUBDIR $ENV{CSB_RESULTS_GROUP})
 if(SUBDIR)
     message("Generation workspace is set to: ${SUBDIR}")

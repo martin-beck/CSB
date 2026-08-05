@@ -1,7 +1,7 @@
 #!/bin/bash
 # Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 # SPDX-License-Identifier: MIT
-
+set -eu
 
 source helper/bm-generator-lib.sh
 
@@ -22,8 +22,8 @@ fi
 
 DIR_PROG_ABS="`readlink -e ${DIR_PROG}`"
 
-files=`find "${DIR_PROG_ABS}" -maxdepth 1 -name '*.prog'`
-if [ -z "${files}" ]; then
+mapfile -d '' files < <(find "${DIR_PROG_ABS}" -maxdepth 1 -type f -name '*.prog' -print0)
+if [ "${#files[@]}" -eq 0 ]; then
   echo "No syzkaller programs found in ${DIR_PROG_ABS}." >&2
   exit 1
 fi
@@ -47,32 +47,48 @@ DIR_OUT_ABS="`readlink -e ${DIR_OUT}`"
 
 cd "${DIR_SYZ_SRC}"
 
-numRunning() {
-  echo `pgrep 'syz-extraction' | wc -l`
-}
+case "${JOBS}" in
+  ''|*[!0-9]*|0) echo "JOBS must be a positive integer." >&2; exit 1 ;;
+esac
 
 i=0
-for file in $files; do
-  while [ $(numRunning) -ge ${JOBS} ]; do
-    sleep 1
+pids=()
+failed=0
+wait_for_workers() {
+  for pid in "${pids[@]}"; do
+    if ! wait "${pid}"; then
+      failed=1
+    fi
   done
-  echo $file
+  pids=()
+}
+
+for file in "${files[@]}"; do
+  echo "${file}"
   dir="${DIR_OUT_ABS}/$i"
   mkdir -p "${dir}"
   prog_os="$(prog_target_os "${file}")"
   prog_arch="$(prog_target_arch "${file}")"
-  bin/syz-extraction -os "${prog_os}" -arch "${prog_arch}" -prog "${file}" -deserialize "${dir}" -minCalls ${MINCALLS} &
-  i=$(($i + 1))
+  bin/syz-extraction -os "${prog_os}" -arch "${prog_arch}" -prog "${file}" -deserialize "${dir}" -minCalls "${MINCALLS}" &
+  pids+=("$!")
+  i=$((i + 1))
+  if [ "${#pids[@]}" -eq "${JOBS}" ]; then
+    wait_for_workers
+  fi
 done
 
-wait
+wait_for_workers
+if [ "${failed}" -ne 0 ]; then
+  echo "At least one syz-extraction worker failed." >&2
+  exit 1
+fi
 
 # remove empty directories
 i=0
-for file in $files; do
+for file in "${files[@]}"; do
   dir="${DIR_OUT_ABS}/$i"
-  if [ -z "$( ls -A ${dir} )" ]; then
+  if [ -z "$(ls -A "${dir}")" ]; then
     rmdir "${dir}"
   fi
-  i=$(($i + 1))
+  i=$((i + 1))
 done
