@@ -34,28 +34,28 @@ struct thread_ctx_s {
   size_t tid;
   size_t iteration;
   bool aggregation_threads;
-  uint64_t *r_min_rocks_write_fcntl_7_0_prog;
-  char *tmpdir_min_rocks_write_fcntl_7_0_prog;
-  int dirfd_min_rocks_write_fcntl_7_0_prog;
-  int num_succeeded_min_rocks_write_fcntl_7_0_prog;
-  int num_failed_min_rocks_write_fcntl_7_0_prog;
-  uintptr_t mmap_offsets_min_rocks_write_fcntl_7_0_prog;
-  char *writeBuffer_min_rocks_write_fcntl_7_0_prog;
-  struct sockaddr_in *connect4_arg_min_rocks_write_fcntl_7_0_prog;
-  struct sockaddr_in6 *connect6_arg_min_rocks_write_fcntl_7_0_prog;
-  struct sockaddr_in *bind4_arg_min_rocks_write_fcntl_7_0_prog;
-  struct sockaddr_in6 *bind6_arg_min_rocks_write_fcntl_7_0_prog;
+  uint64_t *r_min_rocks_openat_missing_0_0_prog;
+  char *tmpdir_min_rocks_openat_missing_0_0_prog;
+  int dirfd_min_rocks_openat_missing_0_0_prog;
+  int num_succeeded_min_rocks_openat_missing_0_0_prog;
+  int num_failed_min_rocks_openat_missing_0_0_prog;
+  uintptr_t mmap_offsets_min_rocks_openat_missing_0_0_prog;
+  char *writeBuffer_min_rocks_openat_missing_0_0_prog;
+  struct sockaddr_in *connect4_arg_min_rocks_openat_missing_0_0_prog;
+  struct sockaddr_in6 *connect6_arg_min_rocks_openat_missing_0_0_prog;
+  struct sockaddr_in *bind4_arg_min_rocks_openat_missing_0_0_prog;
+  struct sockaddr_in6 *bind6_arg_min_rocks_openat_missing_0_0_prog;
 };
 
 uint16_t g_conn_port = 36721;
 uint16_t g_bind_port = 46721;
 
-#define PTR_OFFSET (ctx->mmap_offsets_min_rocks_write_fcntl_7_0_prog - MMAP_OFFSET)
-#define UNIQUE_ID min_rocks_write_fcntl_7_0_prog
+#define PTR_OFFSET (ctx->mmap_offsets_min_rocks_openat_missing_0_0_prog - MMAP_OFFSET)
+#define UNIQUE_ID min_rocks_openat_missing_0_0_prog
 bool abort_on_fail = false;
-#include "syz/min_rocks_write_fcntl_7_0.h"
+#include "syz/min_rocks_openat_missing_0_0.h"
 
-static inline void _mkdir_min_rocks_write_fcntl_7_0_prog(thread_ctx_t *ctx, const char *dir) {
+static inline void _mkdir_min_rocks_openat_missing_0_0_prog(thread_ctx_t *ctx, const char *dir) {
   char tmp[256] = {0};
   char *p = NULL;
   size_t len = 0;
@@ -67,19 +67,19 @@ static inline void _mkdir_min_rocks_write_fcntl_7_0_prog(thread_ctx_t *ctx, cons
   for (p = tmp + 1; *p; p++)
     if (*p == '/') {
       *p = 0;
-      mkdirat(ctx->dirfd_min_rocks_write_fcntl_7_0_prog, tmp, S_IRWXU);
+      mkdirat(ctx->dirfd_min_rocks_openat_missing_0_0_prog, tmp, S_IRWXU);
       *p = '/';
     }
-  mkdirat(ctx->dirfd_min_rocks_write_fcntl_7_0_prog, tmp, S_IRWXU);
+  mkdirat(ctx->dirfd_min_rocks_openat_missing_0_0_prog, tmp, S_IRWXU);
 }
 
-static inline void init_subdirs_min_rocks_write_fcntl_7_0_prog(thread_ctx_t *ctx) {
-  for (int i = 0; i < num_subdirs_min_rocks_write_fcntl_7_0_prog; i++) {
-    _mkdir_min_rocks_write_fcntl_7_0_prog(ctx, subdirs_min_rocks_write_fcntl_7_0_prog[i]);
+static inline void init_subdirs_min_rocks_openat_missing_0_0_prog(thread_ctx_t *ctx) {
+  for (int i = 0; i < num_subdirs_min_rocks_openat_missing_0_0_prog; i++) {
+    _mkdir_min_rocks_openat_missing_0_0_prog(ctx, subdirs_min_rocks_openat_missing_0_0_prog[i]);
   }
 }
 
-static void remove_tmp_dir_contents_best_effort_min_rocks_write_fcntl_7_0_prog(int dirfd) {
+static void remove_tmp_dir_contents_best_effort_min_rocks_openat_missing_0_0_prog(int dirfd) {
   DIR *dp = fdopendir(dirfd);
   if (dp == NULL) {
     (void)close(dirfd);
@@ -96,7 +96,7 @@ static void remove_tmp_dir_contents_best_effort_min_rocks_write_fcntl_7_0_prog(i
     int childfd =
         syscall(SYS_openat2, dirfd, entry->d_name, &how, sizeof(how));
     if (childfd >= 0) {
-      remove_tmp_dir_contents_best_effort_min_rocks_write_fcntl_7_0_prog(childfd);
+      remove_tmp_dir_contents_best_effort_min_rocks_openat_missing_0_0_prog(childfd);
       (void)unlinkat(dirfd, entry->d_name, AT_REMOVEDIR);
     } else {
       (void)unlinkat(dirfd, entry->d_name, 0);
@@ -105,16 +105,16 @@ static void remove_tmp_dir_contents_best_effort_min_rocks_write_fcntl_7_0_prog(i
   (void)closedir(dp);
 }
 
-static inline void rm_tmpdir_min_rocks_write_fcntl_7_0_prog(thread_ctx_t *ctx) {
-  int cleanupfd = openat(ctx->dirfd_min_rocks_write_fcntl_7_0_prog, ".",
+static inline void rm_tmpdir_min_rocks_openat_missing_0_0_prog(thread_ctx_t *ctx) {
+  int cleanupfd = openat(ctx->dirfd_min_rocks_openat_missing_0_0_prog, ".",
                          O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
   if (cleanupfd >= 0)
-    remove_tmp_dir_contents_best_effort_min_rocks_write_fcntl_7_0_prog(cleanupfd);
-  (void)rmdir(ctx->tmpdir_min_rocks_write_fcntl_7_0_prog);
+    remove_tmp_dir_contents_best_effort_min_rocks_openat_missing_0_0_prog(cleanupfd);
+  (void)rmdir(ctx->tmpdir_min_rocks_openat_missing_0_0_prog);
 }
 
 static inline char *bm_target_get_name(void) {
-  return "min_rocks_write_fcntl_7_0";
+  return "min_rocks_openat_missing_0_0";
 }
 
 static inline size_t bm_target_op_count(void) { return NUM_SYSCALLS; }
@@ -127,7 +127,7 @@ static inline void bm_target_get_op_name(char *out_str, const size_t len,
 }
 
 static inline void bm_target_init(uint16_t port, size_t num_threads) {
-  op_name_tbl[0] = "min_rocks_write_fcntl_7_0";
+  op_name_tbl[0] = "min_rocks_openat_missing_0_0";
   g_conn_port = port;
   g_bind_port = port;
   parse_net_addr("BM_SYS_CONNECT_ADDR", "BM_SYS_CONNECT_PORT", &bm_connect_addr,
@@ -145,49 +145,49 @@ static inline void bm_target_reg(thread_ctx_t *ctx, size_t tid) {
   char *tmpdir_template = NULL;
 
   int fd_trunc = 0;
-  tmpdir_template = strdup("./syzkaller_min_rocks_write_fcntl_7_0.XXXXXX");
-  ctx->tmpdir_min_rocks_write_fcntl_7_0_prog = mkdtemp(tmpdir_template);
-  chmod(ctx->tmpdir_min_rocks_write_fcntl_7_0_prog, S_IRWXU | S_IRWXG | S_IRWXO);
-  ctx->dirfd_min_rocks_write_fcntl_7_0_prog = open(ctx->tmpdir_min_rocks_write_fcntl_7_0_prog, O_DIRECTORY | O_PATH);
-  init_subdirs_min_rocks_write_fcntl_7_0_prog(ctx);
-  ctx->num_succeeded_min_rocks_write_fcntl_7_0_prog = 0;
-  ctx->num_failed_min_rocks_write_fcntl_7_0_prog = 0;
+  tmpdir_template = strdup("./syzkaller_min_rocks_openat_missing_0_0.XXXXXX");
+  ctx->tmpdir_min_rocks_openat_missing_0_0_prog = mkdtemp(tmpdir_template);
+  chmod(ctx->tmpdir_min_rocks_openat_missing_0_0_prog, S_IRWXU | S_IRWXG | S_IRWXO);
+  ctx->dirfd_min_rocks_openat_missing_0_0_prog = open(ctx->tmpdir_min_rocks_openat_missing_0_0_prog, O_DIRECTORY | O_PATH);
+  init_subdirs_min_rocks_openat_missing_0_0_prog(ctx);
+  ctx->num_succeeded_min_rocks_openat_missing_0_0_prog = 0;
+  ctx->num_failed_min_rocks_openat_missing_0_0_prog = 0;
 
-  assert(num_filenames_min_rocks_write_fcntl_7_0_prog == num_filesizes_min_rocks_write_fcntl_7_0_prog);
+  assert(num_filenames_min_rocks_openat_missing_0_0_prog == num_filesizes_min_rocks_openat_missing_0_0_prog);
 
-  for (int i = 0; i < num_filenames_min_rocks_write_fcntl_7_0_prog; i++) {
-    fd_trunc = openat(ctx->dirfd_min_rocks_write_fcntl_7_0_prog, filenames_min_rocks_write_fcntl_7_0_prog[i],
+  for (int i = 0; i < num_filenames_min_rocks_openat_missing_0_0_prog; i++) {
+    fd_trunc = openat(ctx->dirfd_min_rocks_openat_missing_0_0_prog, filenames_min_rocks_openat_missing_0_0_prog[i],
                       O_RDWR | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
     // assert(fd_trunc > 0 && "Could not open file at thread registration");
     if (fd_trunc < 0)
       continue;
-    int ret_ft = ftruncate(fd_trunc, filesizes_min_rocks_write_fcntl_7_0_prog[i]);
+    int ret_ft = ftruncate(fd_trunc, filesizes_min_rocks_openat_missing_0_0_prog[i]);
     (void)ret_ft;
     assert(ret_ft == 0);
     close(fd_trunc);
     fd_trunc = 0;
   }
 
-  ctx->mmap_offsets_min_rocks_write_fcntl_7_0_prog = (uintptr_t)(void *)mmap(
+  ctx->mmap_offsets_min_rocks_openat_missing_0_0_prog = (uintptr_t)(void *)mmap(
       NULL, MMAP_LENGTH, PROT_WRITE | PROT_READ | PROT_EXEC,
       MAP_ANONYMOUS | MAP_PRIVATE, (intptr_t)-1, 0ul);
-  if (ctx->mmap_offsets_min_rocks_write_fcntl_7_0_prog == -1) {
+  if (ctx->mmap_offsets_min_rocks_openat_missing_0_0_prog == -1) {
     perror("mmap from syzkaller failed");
     assert(0 && "mmap from syzkaller failed");
   }
 
-  assert(ctx->mmap_offsets_min_rocks_write_fcntl_7_0_prog);
+  assert(ctx->mmap_offsets_min_rocks_openat_missing_0_0_prog);
 
   // allocate and fill write buffer
   // aligned to 4k block size of FS for O_DIRECT support
-  if(maxWriteBufferSize_min_rocks_write_fcntl_7_0_prog > 0) {
-    ctx->writeBuffer_min_rocks_write_fcntl_7_0_prog = (char *)aligned_alloc(maxWriteBufferSizeAlignment_min_rocks_write_fcntl_7_0_prog, maxWriteBufferSize_min_rocks_write_fcntl_7_0_prog);
+  if(maxWriteBufferSize_min_rocks_openat_missing_0_0_prog > 0) {
+    ctx->writeBuffer_min_rocks_openat_missing_0_0_prog = (char *)aligned_alloc(maxWriteBufferSizeAlignment_min_rocks_openat_missing_0_0_prog, maxWriteBufferSize_min_rocks_openat_missing_0_0_prog);
   }
   else {
-    ctx->writeBuffer_min_rocks_write_fcntl_7_0_prog = NULL;
+    ctx->writeBuffer_min_rocks_openat_missing_0_0_prog = NULL;
   }
 
-  if(maxWriteBufferSize_min_rocks_write_fcntl_7_0_prog % maxWriteBufferSizeAlignment_min_rocks_write_fcntl_7_0_prog != 0) {
+  if(maxWriteBufferSize_min_rocks_openat_missing_0_0_prog % maxWriteBufferSizeAlignment_min_rocks_openat_missing_0_0_prog != 0) {
     perror("write buffer is not a multiple of alignment.");
     assert(0 && "write buffer is not a multiple of alignment.");
   }
@@ -203,7 +203,7 @@ static inline void bm_target_reg(thread_ctx_t *ctx, size_t tid) {
     saddr4_con->sin_port = htons(g_conn_port);
     saddr4_con->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   }
-  ctx->connect4_arg_min_rocks_write_fcntl_7_0_prog = saddr4_con;
+  ctx->connect4_arg_min_rocks_openat_missing_0_0_prog = saddr4_con;
 
   // bind IPv4
   struct sockaddr_in *saddr4_bind = NULL;
@@ -216,12 +216,12 @@ static inline void bm_target_reg(thread_ctx_t *ctx, size_t tid) {
     saddr4_bind->sin_port = htons(g_bind_port);
     saddr4_bind->sin_addr.s_addr = htonl(INADDR_ANY);
   }
-  ctx->bind4_arg_min_rocks_write_fcntl_7_0_prog = saddr4_bind;
+  ctx->bind4_arg_min_rocks_openat_missing_0_0_prog = saddr4_bind;
 
   // connect IPv6
   struct sockaddr_in6 *saddr6_con =
       (struct sockaddr_in6 *)malloc(sizeof(struct sockaddr_in6));
-  ctx->connect6_arg_min_rocks_write_fcntl_7_0_prog = saddr6_con;
+  ctx->connect6_arg_min_rocks_openat_missing_0_0_prog = saddr6_con;
   saddr6_con->sin6_family = AF_INET6;
   saddr6_con->sin6_port = htons(g_conn_port);
   saddr6_con->sin6_addr = in6addr_loopback;
@@ -229,58 +229,58 @@ static inline void bm_target_reg(thread_ctx_t *ctx, size_t tid) {
   // bind IPv6
   struct sockaddr_in6 *saddr6_bind =
       (struct sockaddr_in6 *)malloc(sizeof(struct sockaddr_in6));
-  ctx->bind6_arg_min_rocks_write_fcntl_7_0_prog = saddr6_bind;
+  ctx->bind6_arg_min_rocks_openat_missing_0_0_prog = saddr6_bind;
   saddr6_bind->sin6_family = AF_INET6;
   saddr6_bind->sin6_port = htons(g_bind_port);
   saddr6_bind->sin6_addr = in6addr_any;
 
   // EVERYTHING MUST BE INITIALIZED BEFORE
   // do the per test reg
-  bm_target_reg_min_rocks_write_fcntl_7_0_prog(ctx);
+  bm_target_reg_min_rocks_openat_missing_0_0_prog(ctx);
 
   // do one warmup iteration to allocate memory in mmap
-  bm_dispatch_operation_min_rocks_write_fcntl_7_0_prog(ctx, 0);
+  bm_dispatch_operation_min_rocks_openat_missing_0_0_prog(ctx, 0);
 
   // reset statistics
-  ctx->num_succeeded_min_rocks_write_fcntl_7_0_prog = 0;
-  ctx->num_failed_min_rocks_write_fcntl_7_0_prog = 0;
+  ctx->num_succeeded_min_rocks_openat_missing_0_0_prog = 0;
+  ctx->num_failed_min_rocks_openat_missing_0_0_prog = 0;
 }
 
 static inline void bm_target_dereg(thread_ctx_t *ctx, size_t tid) {
   // do the per test dereg
-  bm_target_dereg_min_rocks_write_fcntl_7_0_prog(ctx);
+  bm_target_dereg_min_rocks_openat_missing_0_0_prog(ctx);
 
-  rm_tmpdir_min_rocks_write_fcntl_7_0_prog(ctx);
-  close(ctx->dirfd_min_rocks_write_fcntl_7_0_prog);
-  ctx->dirfd_min_rocks_write_fcntl_7_0_prog = -1;
+  rm_tmpdir_min_rocks_openat_missing_0_0_prog(ctx);
+  close(ctx->dirfd_min_rocks_openat_missing_0_0_prog);
+  ctx->dirfd_min_rocks_openat_missing_0_0_prog = -1;
 
-  munmap((void *)ctx->mmap_offsets_min_rocks_write_fcntl_7_0_prog, MMAP_LENGTH);
-  ctx->mmap_offsets_min_rocks_write_fcntl_7_0_prog = 0;
+  munmap((void *)ctx->mmap_offsets_min_rocks_openat_missing_0_0_prog, MMAP_LENGTH);
+  ctx->mmap_offsets_min_rocks_openat_missing_0_0_prog = 0;
 
-  free(ctx->tmpdir_min_rocks_write_fcntl_7_0_prog);
-  // free(ctx->connect_arg_min_rocks_write_fcntl_7_0_prog);
-  ctx->tmpdir_min_rocks_write_fcntl_7_0_prog = NULL;
+  free(ctx->tmpdir_min_rocks_openat_missing_0_0_prog);
+  // free(ctx->connect_arg_min_rocks_openat_missing_0_0_prog);
+  ctx->tmpdir_min_rocks_openat_missing_0_0_prog = NULL;
 
   // free write buffer
-  free(ctx->writeBuffer_min_rocks_write_fcntl_7_0_prog);
-  ctx->writeBuffer_min_rocks_write_fcntl_7_0_prog = NULL;
+  free(ctx->writeBuffer_min_rocks_openat_missing_0_0_prog);
+  ctx->writeBuffer_min_rocks_openat_missing_0_0_prog = NULL;
 
   // if bm_connect_addr_inited == true, memory is static (see bm_network.h)
   if (!bm_connect_addr_inited) {
-    free(ctx->connect4_arg_min_rocks_write_fcntl_7_0_prog);
-    ctx->connect4_arg_min_rocks_write_fcntl_7_0_prog = NULL;
+    free(ctx->connect4_arg_min_rocks_openat_missing_0_0_prog);
+    ctx->connect4_arg_min_rocks_openat_missing_0_0_prog = NULL;
   }
 
   // if bm_bind_addr_inited == true, memory is static (see bm_network.h)
   if (!bm_bind_addr_inited) {
-    free(ctx->bind4_arg_min_rocks_write_fcntl_7_0_prog);
-    ctx->bind4_arg_min_rocks_write_fcntl_7_0_prog = NULL;
+    free(ctx->bind4_arg_min_rocks_openat_missing_0_0_prog);
+    ctx->bind4_arg_min_rocks_openat_missing_0_0_prog = NULL;
   }
 
-  free(ctx->connect6_arg_min_rocks_write_fcntl_7_0_prog);
-  ctx->connect6_arg_min_rocks_write_fcntl_7_0_prog = NULL;
-  free(ctx->bind6_arg_min_rocks_write_fcntl_7_0_prog);
-  ctx->bind6_arg_min_rocks_write_fcntl_7_0_prog = NULL;
+  free(ctx->connect6_arg_min_rocks_openat_missing_0_0_prog);
+  ctx->connect6_arg_min_rocks_openat_missing_0_0_prog = NULL;
+  free(ctx->bind6_arg_min_rocks_openat_missing_0_0_prog);
+  ctx->bind6_arg_min_rocks_openat_missing_0_0_prog = NULL;
 
 
   V_UNUSED(ctx, tid);
@@ -299,11 +299,11 @@ static inline bm_op_res_t bm_dispatch_operation(thread_ctx_t *ctx,
   bm_op_res_t res_all;
   res_all.op_count = 0;
   res_all.succ_count = 0;
-  ctx->num_succeeded_min_rocks_write_fcntl_7_0_prog = 0;
-  ctx->num_failed_min_rocks_write_fcntl_7_0_prog = 0;
-  bm_dispatch_operation_min_rocks_write_fcntl_7_0_prog(ctx, op_id);
-  res_all.op_count += ctx->num_succeeded_min_rocks_write_fcntl_7_0_prog + ctx->num_failed_min_rocks_write_fcntl_7_0_prog;
-  res_all.succ_count += ctx->num_succeeded_min_rocks_write_fcntl_7_0_prog;
+  ctx->num_succeeded_min_rocks_openat_missing_0_0_prog = 0;
+  ctx->num_failed_min_rocks_openat_missing_0_0_prog = 0;
+  bm_dispatch_operation_min_rocks_openat_missing_0_0_prog(ctx, op_id);
+  res_all.op_count += ctx->num_succeeded_min_rocks_openat_missing_0_0_prog + ctx->num_failed_min_rocks_openat_missing_0_0_prog;
+  res_all.succ_count += ctx->num_succeeded_min_rocks_openat_missing_0_0_prog;
   ctx->iteration++;
   return res_all;
 }
