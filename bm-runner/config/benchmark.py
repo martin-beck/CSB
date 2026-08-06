@@ -47,6 +47,7 @@ class MonitorType(str, Enum):
     PERF_STAT: Runs perf stat.
     PERF_LOCK: Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points. Note that `perf_lock` monitor invokes `perf` monitor even if it was not added by the user. Also when tracepoint events are configured, incompatible frequency arguments (`-F <freq>`, `-F<freq>`,`--freq <freq>`, and `--freq=<freq>`) are automatically removed.
     BPF_TRACE: Runs [bpftrace](https://bpftrace.org/docs/release_025/stdlib) with the given programs. Users may list programs from scripts/bpftrace. Giving multiple programs as arguments, will result in launching multiple instances of bpftrace.
+    OFFCPU: Records sleeper-to-waker kernel-stack edges and wakeup latency with bpftrace. An optional argument overrides the target task name.
     """
 
     MPSTAT = "mpstat"
@@ -57,6 +58,7 @@ class MonitorType(str, Enum):
     PERF_STAT = "perf_stat"
     PERF_LOCK = "perf_lock"
     BPF_TRACE = "bpftrace"
+    OFFCPU = "offcpu"
 
 
 class BenchmarkConfig(dict):

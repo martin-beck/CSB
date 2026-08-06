@@ -1,0 +1,90 @@
+/*
+ * Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * SPDX-License-Identifier: MIT
+ */
+
+#ifndef BPFTRACE_HAVE_BTF
+#include <linux/sched.h>
+#else
+#define TASK_RUNNING 0
+#endif
+
+tracepoint:sched:sched_process_fork
+{
+  if (str(args->parent_comm) == "__TARGET_COMM__" || @target[args->parent_pid]) {
+    @target[args->parent_pid] = 1;
+    @target[args->child_pid] = 1;
+  }
+}
+
+tracepoint:sched:sched_wakeup,
+tracepoint:sched:sched_wakeup_new
+{
+  if ((args->comm == "__TARGET_COMM__" || @target[args->pid]) &&
+      @blocked_since[args->pid]) {
+    @target[args->pid] = 1;
+    @wake_ns[args->pid] = nsecs;
+    @waker_pid[args->pid] = pid;
+    @waker_comm[args->pid] = comm;
+    @waker_stack[args->pid] = kstack;
+  }
+}
+
+tracepoint:sched:sched_switch
+{
+  if ((args->prev_comm == "__TARGET_COMM__" || @target[args->prev_pid]) &&
+      args->prev_state != TASK_RUNNING) {
+    @target[args->prev_pid] = 1;
+    @blocked_since[args->prev_pid] = nsecs;
+    @sleeper_comm[args->prev_pid] = args->prev_comm;
+    @sleeper_stack[args->prev_pid] = kstack;
+  }
+
+  $sleeper = args->next_pid;
+  if (@blocked_since[$sleeper]) {
+    $offcpu_ns = nsecs - @blocked_since[$sleeper];
+    if (@wake_ns[$sleeper]) {
+      $sleep_ns = @wake_ns[$sleeper] - @blocked_since[$sleeper];
+      $runq_ns = nsecs - @wake_ns[$sleeper];
+      printf("CSB_OFFCPU_BEGIN|%d|%s|%d|%s|%llu|%llu|%llu\n%s\nCSB_WAKER_STACK\n%s\nCSB_OFFCPU_END\n",
+             $sleeper, @sleeper_comm[$sleeper], @waker_pid[$sleeper],
+             @waker_comm[$sleeper], $offcpu_ns, $sleep_ns, $runq_ns,
+             @sleeper_stack[$sleeper], @waker_stack[$sleeper]);
+    } else {
+      printf("CSB_OFFCPU_BEGIN|%d|%s|0|unknown|%llu|%llu|0\n%s\nCSB_WAKER_STACK\nunknown\nCSB_OFFCPU_END\n",
+             $sleeper, @sleeper_comm[$sleeper], $offcpu_ns, $offcpu_ns,
+             @sleeper_stack[$sleeper]);
+    }
+    delete(@blocked_since[$sleeper]);
+    delete(@wake_ns[$sleeper]);
+    delete(@waker_pid[$sleeper]);
+    delete(@waker_comm[$sleeper]);
+    delete(@waker_stack[$sleeper]);
+    delete(@sleeper_comm[$sleeper]);
+    delete(@sleeper_stack[$sleeper]);
+  }
+}
+
+tracepoint:sched:sched_process_exit
+{
+  delete(@target[args->pid]);
+  delete(@blocked_since[args->pid]);
+  delete(@wake_ns[args->pid]);
+  delete(@waker_pid[args->pid]);
+  delete(@waker_comm[args->pid]);
+  delete(@waker_stack[args->pid]);
+  delete(@sleeper_comm[args->pid]);
+  delete(@sleeper_stack[args->pid]);
+}
+
+END
+{
+  clear(@target);
+  clear(@blocked_since);
+  clear(@wake_ns);
+  clear(@waker_pid);
+  clear(@waker_comm);
+  clear(@waker_stack);
+  clear(@sleeper_comm);
+  clear(@sleeper_stack);
+}
