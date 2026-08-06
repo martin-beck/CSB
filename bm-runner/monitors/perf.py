@@ -14,6 +14,7 @@ from benchkit.shell.shell import shell_out
 
 
 class FlameGraph(Monitor):
+    STOP_TIMEOUT_SEC = 120
     FG_PATH_DIR = "deps/FlameGraph"
     ARM_SPE_PERIOD_ENV_VAR_NAME = "CSB_ARM_SPE_PERIOD"
     ARM_SPE_DEVICE_GLOB = "/sys/bus/event_source/devices/arm_spe*"
@@ -281,7 +282,9 @@ class FlameGraph(Monitor):
 
     def stop(self):
         if self.perf is not None:
-            self.perf.stop(timeout=30)
+            # Large system-wide tracepoint buffers can take substantially
+            # longer than the sampling window to flush on many-core hosts.
+            self.perf.stop(timeout=self.STOP_TIMEOUT_SEC)
             with open(os.path.join(self.dir, "flamegraph.errors"), "w") as errfile:
                 self.__generate_flamegraph(errfile)
 

@@ -43,6 +43,18 @@ def test_perf_events_skip_arm_spe_when_sysfs_device_missing(monkeypatch, tmp_pat
     ]
 
 
+def test_perf_stop_allows_large_trace_buffers_to_flush(monkeypatch, tmp_path):
+    timeouts = []
+    monitor = FlameGraph.__new__(FlameGraph)
+    monitor.dir = str(tmp_path)
+    monitor.perf = SimpleNamespace(stop=lambda timeout: timeouts.append(timeout))
+    monkeypatch.setattr(monitor, "_FlameGraph__generate_flamegraph", lambda _err: None)
+
+    monitor.stop()
+
+    assert timeouts == [FlameGraph.STOP_TIMEOUT_SEC]
+
+
 def test_perf_events_include_arm_spe_when_sysfs_device_has_type(monkeypatch, tmp_path):
     min_interval = tmp_path / "arm_spe_0" / "caps" / "min_interval"
     min_interval.parent.mkdir(parents=True)
