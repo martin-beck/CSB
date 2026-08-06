@@ -122,6 +122,7 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf_stat"`:  Runs perf stat.
 - `"perf_lock"`:  Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points. Note that `perf_lock` monitor invokes `perf` monitor even if it was not added by the user. Also when tracepoint events are configured, incompatible frequency arguments (`-F <freq>`, `-F<freq>`,`--freq <freq>`, and `--freq=<freq>`) are automatically removed.
 - `"bpftrace"`:  Runs [bpftrace](https://bpftrace.org/docs/release_025/stdlib) with the given programs. Users may list programs from scripts/bpftrace. Giving multiple programs as arguments, will result in launching multiple instances of bpftrace.
+- `"scheduler_scalability"`:  Records a complete previous-CPU to wakeup-target-CPU to actual-run-CPU matrix, migrations, target misses, wakeup-to-run latency, and target-task preemptions with bpftrace. The optional first argument overrides the application `comm` filter.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.

@@ -1,0 +1,68 @@
+/*
+ * Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * SPDX-License-Identifier: MIT
+ */
+
+#ifndef BPFTRACE_HAVE_BTF
+#include <linux/sched.h>
+#else
+#define TASK_RUNNING 0
+#endif
+
+tracepoint:sched:sched_process_fork
+{
+  if (str(args->parent_comm) == "__TARGET_COMM__" || @target[args->parent_pid]) {
+    @target[args->parent_pid] = 1;
+    @target[args->child_pid] = 1;
+  }
+}
+
+tracepoint:sched:sched_wakeup,
+tracepoint:sched:sched_wakeup_new
+{
+  if (args->comm == "__TARGET_COMM__" || @target[args->pid]) {
+    @target[args->pid] = 1;
+    @wake_ns[args->pid] = nsecs;
+    @target_cpu[args->pid] = args->target_cpu + 1;
+  }
+}
+
+tracepoint:sched:sched_switch
+{
+  if (args->prev_comm == "__TARGET_COMM__" || @target[args->prev_pid]) {
+    @target[args->prev_pid] = 1;
+    @last_cpu[args->prev_pid] = cpu + 1;
+    if (args->prev_state == TASK_RUNNING) {
+      @preemptions = @preemptions + 1;
+    }
+  }
+
+  $task = args->next_pid;
+  if (@wake_ns[$task]) {
+    $previous_cpu = @last_cpu[$task] - 1;
+    $requested_cpu = @target_cpu[$task] - 1;
+    $latency_ns = nsecs - @wake_ns[$task];
+    printf("CSB_SCHED|%d|%s|%d|%d|%d|%llu\n", $task, args->next_comm,
+           $previous_cpu, $requested_cpu, cpu, $latency_ns);
+    delete(@wake_ns[$task]);
+    delete(@target_cpu[$task]);
+  }
+}
+
+tracepoint:sched:sched_process_exit
+{
+  delete(@target[args->pid]);
+  delete(@wake_ns[args->pid]);
+  delete(@target_cpu[args->pid]);
+  delete(@last_cpu[args->pid]);
+}
+
+END
+{
+  printf("CSB_SCHED_PREEMPTIONS|%llu\n", @preemptions);
+  clear(@target);
+  clear(@wake_ns);
+  clear(@target_cpu);
+  clear(@last_cpu);
+  clear(@preemptions);
+}
