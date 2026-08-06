@@ -63,7 +63,8 @@ def test_stop_preserves_raw_samples(tmp_path):
     assert json.loads(lines[0]) == {"pressure": {}, "timestamp": 1.0}
 
 
-def test_factory_creates_psi_monitor(tmp_path):
+def test_factory_creates_psi_monitor(monkeypatch, tmp_path):
+    monkeypatch.setenv("CSB_ANALYZE", "true")
     monitor = MonitorFactory.create(MonitorType.PSI_CGROUP, str(tmp_path), [])
 
     assert isinstance(monitor, PsiCgroup)
