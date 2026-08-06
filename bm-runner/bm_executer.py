@@ -120,7 +120,10 @@ class Executer:
             monitor.start()
 
     def __stop_monitors(self):
-        for monitor in self.monitors:
+        # Unwind in reverse start order.  Dependency monitors such as perf are
+        # inserted first and may do expensive postprocessing while stopping;
+        # later collectors must be quiesced before that work begins.
+        for monitor in reversed(self.monitors):
             monitor.stop()
 
     def exec_all(self, threads, duration, port_start: Optional[int]):
