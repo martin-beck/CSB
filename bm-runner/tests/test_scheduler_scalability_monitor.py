@@ -79,6 +79,13 @@ def test_program_replaces_target_and_tracks_forks(monkeypatch, tmp_path):
     assert "sched_process_fork" in rendered
 
 
+def test_program_compares_tracepoint_comm_without_str_cast():
+    rendered = SchedulerScalability.program_for_target("worker")
+
+    assert 'args->parent_comm == "worker"' in rendered
+    assert "str(args->parent_comm)" not in rendered
+
+
 @pytest.mark.parametrize("target", ["", 'bad"name', "bad\\name", "bad\nname"])
 def test_program_rejects_unsafe_target(monkeypatch, tmp_path, target):
     program = tmp_path / "scheduler.bt"

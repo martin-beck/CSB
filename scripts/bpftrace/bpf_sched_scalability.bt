@@ -11,7 +11,7 @@
 
 tracepoint:sched:sched_process_fork
 {
-  if (str(args->parent_comm) == "__TARGET_COMM__" || @target[args->parent_pid]) {
+  if (args->parent_comm == "__TARGET_COMM__" || @target[args->parent_pid]) {
     @target[args->parent_pid] = 1;
     @target[args->child_pid] = 1;
   }
