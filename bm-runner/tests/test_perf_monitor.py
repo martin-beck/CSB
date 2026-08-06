@@ -69,7 +69,7 @@ def test_perf_script_skips_arm_spe_synthesis_but_keeps_tracepoint_filter():
         "script",
         "-i",
         "perf.data",
-        "--itrace=e",
+        "--no-itrace",
         "-F",
         "trace:",
     ]

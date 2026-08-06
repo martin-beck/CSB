@@ -280,10 +280,10 @@ class FlameGraph(Monitor):
         cmd = ["sudo", "perf", "script", "-i", cls.DATA_FILE]
         # Arm SPE AUX records are consumed by perf c2c, but decoding them into
         # the ordinary cycles flamegraph is both irrelevant and very slow.
-        # Ask perf to synthesize only error records from instruction tracing;
-        # regular cycles samples remain available to stackcollapse-perf.pl.
+        # Disable instruction-trace decoding; regular cycles samples remain
+        # available to stackcollapse-perf.pl.
         if any(event.startswith("arm_spe/") for event in events):
-            cmd.append("--itrace=e")
+            cmd.append("--no-itrace")
         # If the recording contains tracepoint events, suppress them in the
         # perf script output so they are not included in the FlameGraph.
         # This leaves hardware sampling events (e.g. cycles) available for
