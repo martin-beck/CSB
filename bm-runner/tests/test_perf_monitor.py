@@ -43,6 +43,37 @@ def test_perf_events_skip_arm_spe_when_sysfs_device_missing(monkeypatch, tmp_pat
     ]
 
 
+def test_perf_data_tracepoint_detection():
+    has_tracepoints = (
+        FlameGraph._FlameGraph__perf_data_has_tracepoints
+    )  # ty: ignore[unresolved-attribute]
+
+    assert has_tracepoints(["cycles/freq=99/", "lock:contention_begin"])
+    assert not has_tracepoints(["cycles/freq=99/", "arm_spe/jitter=1,period=10240/"])
+
+
+def test_perf_script_skips_arm_spe_synthesis_but_keeps_tracepoint_filter():
+    command = (
+        FlameGraph._FlameGraph__perf_script_cmd(  # ty: ignore[unresolved-attribute]
+            [
+                "cycles/freq=99/",
+                "arm_spe/jitter=1,period=10240/",
+                "lock:contention_begin",
+            ]
+        )
+    )
+
+    assert command == [
+        "sudo",
+        "perf",
+        "script",
+        "-i",
+        "perf.data",
+        "--itrace=e",
+        "-F",
+        "trace:",
+    ]
+
 def test_perf_events_include_arm_spe_when_sysfs_device_has_type(monkeypatch, tmp_path):
     min_interval = tmp_path / "arm_spe_0" / "caps" / "min_interval"
     min_interval.parent.mkdir(parents=True)

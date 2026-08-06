@@ -234,20 +234,16 @@ class FlameGraph(Monitor):
         Generates flamegraph on perf data in output dir
         """
         # run perf script on the perf data in results folder
-        cmd = ["sudo", "perf", "script", "-i", self.DATA_FILE]
-        # If the recording contains tracepoint events, suppress them in the
-        # perf script output so they are not included in the FlameGraph.
-        # This leaves hardware sampling events (e.g. cycles) available for
-        # stackcollapse-perf.pl while preserving the tracepoints in perf.data
-        # for other analyses such as `perf lock contention`.
-        if self.__perf_data_has_tracepoints():
-            cmd.extend(["-F", "trace:"])
+        events = self.__perf_data_events()
+        cmd = self.__perf_script_cmd(events)
+
         perf = subprocess.Popen(
             cmd,
             cwd=self.dir,
             stdout=subprocess.PIPE,
             stderr=errfile,
         )
+
         # run stack collapse on the output of perf record
         stacks_file = os.path.join(self.dir, "flamegraph.stacks")
         with open(stacks_file, "w") as stacks:
@@ -279,13 +275,31 @@ class FlameGraph(Monitor):
             except subprocess.CalledProcessError as e:
                 bm_log(f"Failed to generate flamegraph: {e}", LogType.ERROR)
 
+    @classmethod
+    def __perf_script_cmd(cls, events: list[str]) -> list[str]:
+        cmd = ["sudo", "perf", "script", "-i", cls.DATA_FILE]
+        # Arm SPE AUX records are consumed by perf c2c, but decoding them into
+        # the ordinary cycles flamegraph is both irrelevant and very slow.
+        # Ask perf to synthesize only error records from instruction tracing;
+        # regular cycles samples remain available to stackcollapse-perf.pl.
+        if any(event.startswith("arm_spe/") for event in events):
+            cmd.append("--itrace=e")
+        # If the recording contains tracepoint events, suppress them in the
+        # perf script output so they are not included in the FlameGraph.
+        # This leaves hardware sampling events (e.g. cycles) available for
+        # stackcollapse-perf.pl while preserving the tracepoints in perf.data
+        # for other analyses such as `perf lock contention`.
+        if cls.__perf_data_has_tracepoints(events):
+            cmd.extend(["-F", "trace:"])
+        return cmd
+
     def stop(self):
         if self.perf is not None:
             self.perf.stop(timeout=30)
             with open(os.path.join(self.dir, "flamegraph.errors"), "w") as errfile:
                 self.__generate_flamegraph(errfile)
 
-    def __perf_data_has_tracepoints(self) -> bool:
+    def __perf_data_events(self) -> list[str]:
         cmd = [
             "sudo",
             "perf",
@@ -296,9 +310,13 @@ class FlameGraph(Monitor):
         try:
             result = shell_out(cmd, current_dir=self.dir)
 
-            return any(
-                event.startswith("lock:") or event.startswith("tracepoint:")
-                for event in result.split()
-            )
+            return result.split()
         except Exception:
-            return False
+            return []
+
+    @staticmethod
+    def __perf_data_has_tracepoints(events: list[str]) -> bool:
+        return any(
+            event.startswith("lock:") or event.startswith("tracepoint:")
+            for event in events
+        )
