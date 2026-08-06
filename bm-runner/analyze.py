@@ -11,6 +11,7 @@ from config.plot import PlotConfig, PlotType
 from bm_utils import write_to_file, get_all_files_by_ext, read_data_frame_from_csv
 from datetime import datetime
 from visual.report import Report
+from scaling_derivative import add_scaling_derivatives, monitor_fields, rank_signal_correlations
 
 ################################################################################################
 # Input: directories
@@ -107,11 +108,17 @@ def transform(file: str) -> list:
 
     grouped = df.groupby(group_by_fields)
     for key_group, g in grouped:
-        per_run = (
-            g.groupby(COUNT_FIELD)
-            .agg(throughput_avg=(THROUGHPUT_FIELD, "mean"), success_avg=(SUCCESS_FIELD, "mean"))
-            .reset_index()
-        )  # container_cnt becomes a column
+        signals = monitor_fields(g)
+        aggregation = {
+            THROUGHPUT_FIELD: "mean",
+            SUCCESS_FIELD: "mean",
+            **{signal: "mean" for signal in signals},
+        }
+        per_run = g.groupby(COUNT_FIELD).agg(aggregation).reset_index()
+        per_run.rename(
+            columns={THROUGHPUT_FIELD: MEASUREMENT_FIELD, SUCCESS_FIELD: "success_avg"},
+            inplace=True,
+        )
 
         key_group = key_group if isinstance(key_group, tuple) else (key_group,)
         for idx, col in enumerate(group_by_fields):
@@ -124,6 +131,7 @@ def transform(file: str) -> list:
         baseline = per_run.loc[per_run[COUNT_FIELD] == min_container, MEASUREMENT_FIELD].iloc[0]
         # calc linearity
         per_run[LINEARITY_FIELD] = per_run[MEASUREMENT_FIELD] / baseline
+        per_run = add_scaling_derivatives(per_run, signals)
         results.append(per_run)
     return results
 
@@ -264,9 +272,15 @@ if __name__ == "__main__":
 
     per_bm = generate_comparison_reports(final_df)
     csv = final_df.to_csv(index=False)
+    signal_ranking = rank_signal_correlations(final_df, group_by_fields)
 
     write_to_file(dir=output_dir_name, fname="results.md", content=md_table)
     write_to_file(dir=output_dir_name, fname="results.csv", content=csv)
+    write_to_file(
+        dir=output_dir_name,
+        fname="scaling-signals.csv",
+        content=signal_ranking.to_csv(index=False),
+    )
 
     report = Report("Analysis Report")
     dump_graphs_to_doc(output_dir_name, report)

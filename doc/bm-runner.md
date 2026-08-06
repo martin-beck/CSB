@@ -184,6 +184,15 @@ After generation is successful, users can run all generated benchmarks as follow
 scripts/run-all.sh *zoom_out*
 ```
 
+## Cross-run scaling derivatives
+
+`bm-runner/analyze.py` computes scaling efficiency and marginal throughput for each
+execution-unit step. Numeric monitor columns with supported monitor prefixes are
+normalized per completed operation and differentiated across the execution-unit
+axis. `scaling-signals.csv` ranks monitor derivatives by their correlation with
+lost scaling efficiency. Use at least three execution-unit counts for a useful
+ranking and interpret correlation together with the saved raw monitor evidence.
+
 
 __Note: make sure to run in the project root, and remove existing build folder before running__
 
