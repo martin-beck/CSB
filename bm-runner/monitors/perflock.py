@@ -14,6 +14,7 @@ from monitors.perf import FlameGraph
 
 class PerfLock(Monitor):
     LOCK_CONTENTION_CSV = "lock-contention.csv"
+    LOCK_IDENTITY_CSV = "lock-contention-identity.csv"
     TARGET_METRIC = "avg_wait"
     LOCK_CONTENTION_SEPARATOR = ";"
     LOCK_CONTENTION_TOP_N = 20
@@ -23,11 +24,21 @@ class PerfLock(Monitor):
     # The command `perf lock contention -x ";"` will output a CSV with the following header
     # output: contended; total wait; max wait; avg wait; type; caller
     header = ["contended", "total_wait", "max_wait", "avg_wait", "type", "caller"]
+    identity_header = [
+        "contended",
+        "total_wait",
+        "max_wait",
+        "avg_wait",
+        "address",
+        "symbol",
+        "type",
+    ]
 
     def __init__(self, output_dir: str, args: list[str] = ["-a"]):
         super().__init__(dir=output_dir, args=args)
         self.name = "perf-lock"
         self.perf_contention_csv = os.path.join(self.dir, self.LOCK_CONTENTION_CSV)
+        self.perf_identity_csv = os.path.join(self.dir, self.LOCK_IDENTITY_CSV)
 
     def start(self):
         pass
@@ -37,7 +48,7 @@ class PerfLock(Monitor):
 
     def collect_results(self):
         output = ""
-        if self.__run_lock_contention():
+        if self.__run_lock_contention(self.perf_contention_csv):
             df = read_data_frame_from_csv(self.perf_contention_csv, names=self.header)
             if df is not None and not df.empty:
                 # dump detailed plot of head results
@@ -52,6 +63,22 @@ class PerfLock(Monitor):
                 output += f"perf_lock_total_wait={total_wait};"
             else:
                 bm_log(f"{self.name} did not produce a valid data-frame", LogType.ERROR)
+        if self.__run_lock_contention(self.perf_identity_csv, lock_identity=True):
+            identities = read_data_frame_from_csv(
+                self.perf_identity_csv, names=self.identity_header
+            )
+            if identities is not None and not identities.empty:
+                for column in ("address", "symbol", "type"):
+                    identities[column] = identities[column].astype(str).str.strip()
+                identities = identities.sort_values("total_wait", ascending=False)
+                hottest = identities.iloc[0]
+                self.__plot_identities(identities.head(self.LOCK_CONTENTION_TOP_N))
+                output += f"perf_lock_unique_locks={len(identities)};"
+                output += f"perf_lock_hottest_address={hottest['address']};"
+                output += f"perf_lock_hottest_symbol={hottest['symbol']};"
+                output += f"perf_lock_hottest_total_wait={hottest['total_wait']};"
+            else:
+                bm_log(f"{self.name} did not produce lock identities", LogType.ERROR)
         return output
 
     @staticmethod
@@ -68,7 +95,7 @@ class PerfLock(Monitor):
             args.extend(["-e", event])
         return args
 
-    def __run_lock_contention(self) -> bool:
+    def __run_lock_contention(self, output_file: str, lock_identity: bool = False) -> bool:
         cmd = [
             "sudo",
             "perf",
@@ -81,8 +108,10 @@ class PerfLock(Monitor):
             "-x",  # output report should be a CSV with `;` as delimiter
             ";",
             "--output",
-            self.perf_contention_csv,
+            output_file,
         ]
+        if lock_identity:
+            cmd.append("--lock-addr")
         if not os.path.exists(os.path.join(self.dir, FlameGraph.DATA_FILE)):
             bm_log(
                 f"{self.name} Could not find {FlameGraph.DATA_FILE} in {self.dir}!", LogType.ERROR
@@ -115,4 +144,18 @@ class PerfLock(Monitor):
                 shape="barplot",
             )
             plot_file = os.path.join(self.dir, f"perf_lock_{y}")
+            PlotChart.plot(cfg, df, plot_file)
+
+    def __plot_identities(self, df: pd.DataFrame):
+        for y, label in (("contended", "Contended"), ("total_wait", "Total Wait")):
+            cfg = PlotConfig(
+                y=y,
+                y_lbl=label,
+                x="symbol",
+                x_lbl="Lock Identity",
+                hue="type",
+                hue_lbl="Lock Type",
+                shape="barplot",
+            )
+            plot_file = os.path.join(self.dir, f"perf_lock_identity_{y}")
             PlotChart.plot(cfg, df, plot_file)
