@@ -11,6 +11,7 @@ from monitors.monitor import Monitor
 from monitors.perfstat import PerfStat
 from monitors.perflock import PerfLock
 from monitors.bpftrace import BpfTrace
+from monitors.perfc2c import PerfC2C
 from utils.logger import bm_log, LogType
 import sys
 from config.env_config import EnvUniversalConfig, UniversalConfig
@@ -61,6 +62,8 @@ class MonitorFactory:
                 return PerfLock(output_dir=results_dir, args=args)
             case MonitorType.BPF_TRACE:
                 return BpfTrace(output_dir=results_dir, args=args)
+            case MonitorType.PERF_C2C:
+                return PerfC2C(output_dir=results_dir, args=args)
             case _:
                 bm_log(f"Unsupported monitor type {monitor_type}", LogType.FATAL)
                 sys.exit(1)
