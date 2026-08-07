@@ -5,6 +5,8 @@ Commands vary by distribution; inspect generated entries and vendor documentatio
 instead of assuming paths or menu titles.
 Complete the separate reboot-readiness probe and persist all campaign-critical
 volatile state before applying this boot procedure.
+Complete the access-safety gate, including direct and reverse SSH paths plus
+pre-change and candidate-boot rollback timers, before any mutation.
 
 ## Recovery Contract
 
@@ -89,6 +91,10 @@ Do not reboot until all checks pass:
 - stable is persistent default and candidate is one-shot;
 - panic/oops settings and available watchdog are verified;
 - SSH, console/BMC path, reconnect deadline, and recovery owner are recorded;
+- direct reconnecting SSH and the supervised reverse tunnel pass independent
+  end-to-end tests, with persistent logs and restricted credentials;
+- the current pre-change rollback and candidate-boot bailout states and deadlines
+  are verified from both access paths;
 - the volatile-state audit, persistent continuation manifest, off-host copy, and
   post-boot prerequisite probe have been verified;
 - build, install, bootloader, and preflight logs are durable off-host.

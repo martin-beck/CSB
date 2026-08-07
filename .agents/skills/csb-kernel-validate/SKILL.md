@@ -11,7 +11,9 @@ execution. Preserve their evidence, cleanup, copy-back, and reporting rules.
 Read [references/boot-safety.md](references/boot-safety.md) before changing a
 remote boot configuration or installing a kernel. Read
 [references/reboot-readiness.md](references/reboot-readiness.md) before the
-first build and again before every reboot.
+first build and again before every reboot. Read and apply
+[references/access-safety.md](references/access-safety.md) before the first
+change to networking, SSH, bootloader, watchdog, panic, or reboot configuration.
 
 ## Preconditions
 
@@ -30,6 +32,12 @@ first build and again before every reboot.
   other ephemeral storage to persistent storage, and copy the recovery manifest
   off-host. Do not assume `/tmp`, `/run`, `/dev/shm`, tmux, shell state, runtime
   directories, temporary mounts, or manually applied host tuning survives reboot.
+- Establish and test two independent SSH paths before reboot-related mutation:
+  a controller-side reconnecting SSH client in a dedicated tmux/screen session,
+  and a remote-supervised reverse SSH tunnel to a controller endpoint. Arm a
+  tested, generously timed stable-kernel rollback before each risky change. Keep
+  access credentials restricted and never weaken SSH or firewall policy merely
+  to make the tunnel work.
 - Require a verified one-shot boot path that leaves the stable kernel as the
   persistent default. If unavailable, stop before reboot and report the missing
   recovery mechanism. A timeout alone is not recovery.
@@ -53,15 +61,20 @@ the user supplies another budget. For each candidate:
    logged exit statuses. Run the relevant narrow object/subsystem tests plus the
    kernel's build-time checks. Verify image, modules, initramfs, symbol/map, and
    release-name consistency before installation.
-4. **Arm recovery.** Keep the known-good kernel persistent default, install the
+4. **Arm access and recovery.** Verify both SSH paths from end to end, preserve
+   their logs outside tmpfs, and arm the pre-change stable rollback before any
+   reboot-safety mutation. Keep the known-good kernel persistent default, install the
    uniquely named candidate beside it, enable panic/oops reboot, configure and
-   verify a hardware watchdog when available, and select the candidate for one
-   boot only. Save bootloader state and the commands needed to undo every change.
-5. **Preflight and reboot.** Run the complete reboot-readiness gate. Recheck idle
+   verify a hardware watchdog when available, and prepare a post-boot bailout
+   timer. Select the candidate for one boot only. Save bootloader state and the
+   commands needed to undo every change.
+5. **Preflight and reboot.** Run the complete reboot-readiness and access-safety
+   gates. Recheck idle
    state, stable default, candidate
    one-shot entry, filesystem health, free space, initramfs contents, root-device
    support, network driver, SSH service, watchdog, durable logs, persistent
-   campaign state, and the tested post-boot continuation command. Reboot once.
+   campaign state, both SSH paths, armed rollback/bailout state, and the tested
+   post-boot continuation command. Reboot once.
    Poll with bounded reconnect attempts; use BMC/console evidence when available.
 6. **Verify identity and health.** Do not benchmark merely because SSH returned.
    Confirm hostname, `uname -r`, build ID/version, `/proc/cmdline`, loaded modules,
@@ -109,6 +122,7 @@ continuation/     prerequisite probes, volatile-state inventory, restart manifes
 patches/          each candidate and source commit
 build/            commands, logs, exit-status ledger, artifact hashes
 boot/             preflight, bootloader state, watchdog, journal/dmesg
+access/           direct/reverse SSH probes, service state, rollback timers/logs
 stable/           baseline results and analysis
 candidate-N/      results, analysis, refine reports, health evidence
 comparison/       A/B tables, statistics, decision and iteration ledger

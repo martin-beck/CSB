@@ -18,6 +18,8 @@ Record and verify:
 - bootloader entries/default/one-shot support, stable kernel artifacts, console
   or BMC, watchdog, persistent journal/pstore, SSH/network startup, DNS/routes,
   firewall, and time synchronization;
+- direct and reverse SSH endpoints, host keys, restricted credentials, supervised
+  service ordering/restart behavior, allocated reverse port, and persistent logs;
 - CSB checkout and submodule commits/dirty state, configs, generated headers,
   benchmark executables, runtime images/rootfs, Python environment, kernel source,
   patch, build config, toolchain, packages, sudo rights, and monitor tools;
@@ -75,6 +77,8 @@ Create a continuation manifest containing:
   monitor preparation that must be reconstructed after boot;
 - an idempotent post-boot probe, setup sequence, continuation command, expected
   process/session names, validation commands, rollback commands, and stop gates.
+- exact direct/reverse SSH verification commands plus pre-change rollback and
+  candidate-boot bailout unit names, deadlines, hashes, logs, and disarm rules.
 
 Copy the manifest and irreplaceable evidence to the controller before reboot.
 Verify checksums at the destination. Never move credentials to the controller or
@@ -93,6 +97,7 @@ Do not configure automatic benchmark execution at boot. First require SSH or
 console reconnection, candidate-kernel identity and health verification, stable
 fallback verification, and prerequisite parity. Automation may start only an
 idempotent probe that records readiness without mutating benchmark results.
+Test both SSH paths and timed rollback in non-mutating/check mode before reboot.
 
 ## Post-Boot Parity Gate
 
