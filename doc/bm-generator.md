@@ -88,7 +88,7 @@ the following scripts within `bm-generator/`:
 |`04_reduce.sh`| Reduces extracted [syzlang][] programs by dynamically detecting repeated syscall motifs and keeping a dependency-valid representative sample. Output is stored in `reduced/` with the same directory layout as `extracted/`. |
 |`05_multidiff.sh`| Uses syzkaller's `syz-multidiff` to fold equivalent and constant-only-different programs. Selected programs are copied to `multidiff/` with their relative layout preserved. |
 |`06_prepare.sh`| Processes all `multidiff/*.prog` [syzlang][] programs. Each input program is converted into a C header containing a function calling all dependent syscalls from the input [syzlang][] program. Output is stored in `../bench/targets/gen-ws/syz/min_<id3>.h` |
-|`07_generate.sh`| Uses [tmplr][] to generate [bm-runner][] compatible headers and JSON configuration for all generated `../bench/targets/gen-ws/syz/min_<id3>.h` files. Output is stored as `../bench/targets/gen-ws/min_<id3>.h` header and `../../config/gen-ws/fg_min_<id3>.json`. |
+|`07_generate.sh`| Uses [tmplr][] to generate [bm-runner][] compatible target registries, private per-program C translation units, and JSON configuration for all generated `../bench/targets/gen-ws/syz/min_<id3>.h` files. Output is stored as `../bench/targets/gen-ws/min_<id3>.h`, `../bench/targets/gen-ws/min_<id3>.d/min_<id3>.c`, and `../../config/gen-ws/fg_min_<id3>.json`. |
 |`08_select.sh`| Runs all the auto-generated benchmarks for a short duration, performs pairwise comparison of the flamegraphs of the benchmark execution, and prints a list of benchmarks that are different enough from each other. |
 
 The only script that takes an argument is `02_parse.sh`, which needs a path to an strace log file generated as described below.
@@ -271,6 +271,17 @@ program generation.
 Users can generate JSON files for any group of generated benchmark headers.
 The generator reads input headers from:
 `bench/targets/<group>/syz/*.h` and writes the generated JSON files to `config/<group>/`
+
+For each generated syzkaller header it also writes a CSB target registry to
+`bench/targets/<group>/<name>.h` and a private program translation unit to
+`bench/targets/<group>/<name>.d/<name>.c`. CMake automatically adds the
+companion source when it builds the matching target. Keeping each syzkaller
+program in its own translation unit permits ordinary static C identifiers and
+does not require manual `UNIQUE_*` namespacing.
+
+`syz_single.h.in` is the current translation-unit registry template. The
+previous combined-header template remains available as `syz_single_v3.h.in`,
+alongside the older `syz_single_v2.0.1.h.in` compatibility template.
 
 By default, `<group>` is `gen-ws`. To generate JSON files for another group,
 set the environment variable `CSB_RESULTS_GROUP` before running the CMake build target.

@@ -1,0 +1,262 @@
+/*
+ * Copyright (C) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * SPDX-License-Identifier: MIT
+ */
+$_begin(NN = [[1; 2]]);
+/**
+ * @file syz_program_NN.c
+ * @brief Private translation unit for syzkaller program NN.
+ */
+$_end();
+
+#include <CSB/bm_generated_program.h>
+#include <CSB/compiler.h>
+#include <CSB/macros.h>
+
+#include <assert.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <linux/openat2.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <CSB/bm_network.h>
+
+typedef struct csb_program_ctx_s {
+    size_t tid;
+    size_t iteration;
+    bool aggregation_threads;
+    uint64_t *r;
+    char *tmpdir;
+    int dirfd;
+    int num_succeeded;
+    int num_failed;
+    uintptr_t mmap_offsets;
+    char *writeBuffer;
+    struct sockaddr_in *connect4_arg;
+    struct sockaddr_in6 *connect6_arg;
+    struct sockaddr_in *bind4_arg;
+    struct sockaddr_in6 *bind6_arg;
+} csb_program_ctx_t;
+
+static uint16_t g_conn_port = 36721;
+static uint16_t g_bind_port = 46721;
+static bool abort_on_fail __attribute__((unused));
+
+#define BM_CTX_TID (ctx->tid)
+#define PTR_OFFSET (ctx->mmap_offsets - MMAP_OFFSET)
+$_begin(NN = [[1; 2]]);
+#define CSB_PROGRAM_NAME "NN"
+#define thread_ctx_t csb_program_ctx_t
+#include "../syz/NN.h"
+$_end();
+#undef thread_ctx_t
+#undef CSB_PROGRAM_NAME
+#undef PTR_OFFSET
+#undef BM_CTX_TID
+
+static void make_dir(csb_program_ctx_t *ctx, const char *dir)
+{
+    char tmp[256] = {0};
+    snprintf(tmp, sizeof(tmp), "%s", dir);
+    size_t len = strlen(tmp);
+    if (len != 0 && tmp[len - 1] == '/')
+        tmp[len - 1] = 0;
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p != '/')
+            continue;
+        *p = 0;
+        (void)mkdirat(ctx->dirfd, tmp, S_IRWXU);
+        *p = '/';
+    }
+    (void)mkdirat(ctx->dirfd, tmp, S_IRWXU);
+}
+
+static void init_subdirs(csb_program_ctx_t *ctx)
+{
+    for (int i = 0; i < num_subdirs; i++)
+        make_dir(ctx, subdirs[i]);
+}
+
+static void remove_tmp_dir_contents_best_effort(int dirfd)
+{
+    DIR *dp = fdopendir(dirfd);
+    if (dp == NULL) {
+        (void)close(dirfd);
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dp)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0)
+            continue;
+        const struct open_how how = {
+            .flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC,
+            .resolve = RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
+                       RESOLVE_NO_XDEV,
+        };
+        int childfd = syscall(SYS_openat2, dirfd, entry->d_name, &how,
+                              sizeof(how));
+        if (childfd >= 0) {
+            remove_tmp_dir_contents_best_effort(childfd);
+            (void)unlinkat(dirfd, entry->d_name, AT_REMOVEDIR);
+        } else {
+            (void)unlinkat(dirfd, entry->d_name, 0);
+        }
+    }
+    (void)closedir(dp);
+}
+
+static void remove_tmpdir(csb_program_ctx_t *ctx)
+{
+    int cleanupfd = openat(ctx->dirfd, ".",
+                           O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (cleanupfd >= 0)
+        remove_tmp_dir_contents_best_effort(cleanupfd);
+    (void)rmdir(ctx->tmpdir);
+}
+
+static void program_init(uint16_t port)
+{
+    g_conn_port = port;
+    g_bind_port = port;
+    parse_net_addr("BM_SYS_CONNECT_ADDR", "BM_SYS_CONNECT_PORT",
+                   &bm_connect_addr, &bm_connect_addr_inited, g_conn_port);
+    parse_net_addr("BM_SYS_BIND_ADDR", "BM_SYS_BIND_PORT", &bm_bind_addr,
+                   &bm_bind_addr_inited, g_bind_port);
+}
+
+static void *program_create(size_t tid)
+{
+    csb_program_ctx_t *ctx = calloc(1, sizeof(*ctx));
+    assert(ctx);
+    ctx->tid = tid;
+
+$_begin(NN = [[1; 2]]);
+    char *tmpdir_template = strdup("./syzkaller_NN.XXXXXX");
+$_end();
+    assert(tmpdir_template);
+    ctx->tmpdir = mkdtemp(tmpdir_template);
+    assert(ctx->tmpdir);
+    (void)chmod(ctx->tmpdir, S_IRWXU | S_IRWXG | S_IRWXO);
+    ctx->dirfd = open(ctx->tmpdir, O_DIRECTORY | O_PATH);
+    assert(ctx->dirfd >= 0);
+    init_subdirs(ctx);
+
+    assert(num_filenames == num_filesizes);
+    for (int i = 0; i < num_filenames; i++) {
+        int fd = openat(ctx->dirfd, filenames[i], O_RDWR | O_CREAT,
+                        S_IRWXU | S_IRWXG | S_IRWXO);
+        if (fd < 0)
+            continue;
+        int ret = ftruncate(fd, filesizes[i]);
+        (void)close(fd);
+        if (ret != 0) {
+            perror("ftruncate");
+            abort();
+        }
+    }
+
+    ctx->mmap_offsets = (uintptr_t)mmap(NULL, MMAP_LENGTH,
+        PROT_WRITE | PROT_READ | PROT_EXEC,
+        MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    assert(ctx->mmap_offsets != (uintptr_t)MAP_FAILED);
+
+    if (maxWriteBufferSize != 0) {
+        if (maxWriteBufferSizeAlignment == 0 ||
+            maxWriteBufferSize % maxWriteBufferSizeAlignment != 0) {
+            fprintf(stderr, "invalid generated write-buffer alignment\n");
+            abort();
+        }
+        ctx->writeBuffer = aligned_alloc(maxWriteBufferSizeAlignment,
+                                         maxWriteBufferSize);
+        assert(ctx->writeBuffer);
+    }
+
+    if (bm_connect_addr_inited) {
+        ctx->connect4_arg = &bm_connect_addr;
+    } else {
+        ctx->connect4_arg = calloc(1, sizeof(*ctx->connect4_arg));
+        assert(ctx->connect4_arg);
+        ctx->connect4_arg->sin_family = AF_INET;
+        ctx->connect4_arg->sin_port = htons(g_conn_port);
+        ctx->connect4_arg->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    }
+
+    if (bm_bind_addr_inited) {
+        ctx->bind4_arg = &bm_bind_addr;
+    } else {
+        ctx->bind4_arg = calloc(1, sizeof(*ctx->bind4_arg));
+        assert(ctx->bind4_arg);
+        ctx->bind4_arg->sin_family = AF_INET;
+        ctx->bind4_arg->sin_port = htons(g_bind_port);
+        ctx->bind4_arg->sin_addr.s_addr = htonl(INADDR_ANY);
+    }
+
+    ctx->connect6_arg = calloc(1, sizeof(*ctx->connect6_arg));
+    assert(ctx->connect6_arg);
+    ctx->connect6_arg->sin6_family = AF_INET6;
+    ctx->connect6_arg->sin6_port = htons(g_conn_port);
+    ctx->connect6_arg->sin6_addr = in6addr_loopback;
+
+    ctx->bind6_arg = calloc(1, sizeof(*ctx->bind6_arg));
+    assert(ctx->bind6_arg);
+    ctx->bind6_arg->sin6_family = AF_INET6;
+    ctx->bind6_arg->sin6_port = htons(g_bind_port);
+    ctx->bind6_arg->sin6_addr = in6addr_any;
+
+    bm_target_reg(ctx);
+    (void)bm_dispatch_operation(ctx, 0);
+    ctx->num_succeeded = 0;
+    ctx->num_failed = 0;
+    return ctx;
+}
+
+static csb_program_result_t program_dispatch(void *state, size_t op_id)
+{
+    csb_program_ctx_t *ctx = state;
+    ctx->num_succeeded = 0;
+    ctx->num_failed = 0;
+    (void)bm_dispatch_operation(ctx, op_id);
+    ctx->iteration++;
+    return (csb_program_result_t){
+        .op_count = ctx->num_succeeded + ctx->num_failed,
+        .succ_count = ctx->num_succeeded,
+    };
+}
+
+static void program_destroy(void *state)
+{
+    csb_program_ctx_t *ctx = state;
+    bm_target_dereg(ctx);
+    remove_tmpdir(ctx);
+    (void)close(ctx->dirfd);
+    (void)munmap((void *)ctx->mmap_offsets, MMAP_LENGTH);
+    free(ctx->tmpdir);
+    free(ctx->writeBuffer);
+    if (!bm_connect_addr_inited)
+        free(ctx->connect4_arg);
+    if (!bm_bind_addr_inited)
+        free(ctx->bind4_arg);
+    free(ctx->connect6_arg);
+    free(ctx->bind6_arg);
+    free(ctx);
+}
+
+$_begin(NN = [[1; 2]]);
+const csb_generated_program_t csb_program_NN = {
+    .name = "NN",
+    .init = program_init,
+    .create = program_create,
+    .dispatch = program_dispatch,
+    .destroy = program_destroy,
+};
+$_end();

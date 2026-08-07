@@ -71,7 +71,9 @@ foreach(target IN ITEMS ${TARGETS})
 
     string(TOLOWER ${TEST_CASE} TEST_CASE)
 
-    add_executable(${TEST_CASE} ${BM_FILE})
+    file(GLOB TARGET_PROGRAM_SOURCES CONFIGURE_DEPENDS
+         "${PARENT}/${bm_target_prefix}.d/*.c")
+    add_executable(${TEST_CASE} ${BM_FILE} ${TARGET_PROGRAM_SOURCES})
 
     target_link_libraries(${TEST_CASE} pthread CSB)
 

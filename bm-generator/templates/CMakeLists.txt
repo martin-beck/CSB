@@ -19,6 +19,7 @@ add_custom_command(
 
 # Find all single template files
 file(GLOB TEMPLATES *single*.in)
+set(PROGRAM_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/syz_program.c.in")
 set(SUBDIR $ENV{CSB_RESULTS_GROUP})
 if(SUBDIR)
     message("Generation workspace is set to: ${SUBDIR}")
@@ -109,6 +110,17 @@ foreach(HEADER ${HEADERS})
         # add to the global generation target
         add_dependencies(${SINGLE_BM_TARGET} ${GROUP_TARGET})
     endforeach()
+
+    set(PROGRAM_SOURCE_DIR "${HEADER_DIR}/${SUBDIR}/${HEADER_NAME}.d")
+    set(PROGRAM_SOURCE "${PROGRAM_SOURCE_DIR}/${HEADER_NAME}.c")
+    set(PROGRAM_TARGET "syz_program_${HEADER_NAME}_c")
+    add_custom_target(
+        ${PROGRAM_TARGET}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PROGRAM_SOURCE_DIR}"
+        COMMAND ${TMPLR_PROGRAM} -DNN="${HEADER_NAME}" "${PROGRAM_TEMPLATE}" >
+                "${PROGRAM_SOURCE}")
+    add_dependencies(${PROGRAM_TARGET} ${TMPLR_TARGET})
+    add_dependencies(${SINGLE_BM_TARGET} ${PROGRAM_TARGET})
 endforeach(HEADER)
 
 # ##############################################################################
