@@ -2,8 +2,14 @@
 
 Complete this gate before changing networking, firewall, SSH, bootloader,
 watchdog, panic, or reboot configuration. Use two independently tested SSH paths
-plus timed rollback. Console/BMC access remains preferable and must be recorded
-when available.
+plus timed rollback. Independently tested out-of-band console, power/reset, and
+recovery-media control is mandatory and must be recorded.
+
+Also complete
+[host-recovery-safety.md](host-recovery-safety.md) before any host mutation.
+Out-of-band recovery is mandatory for kernel validation: two SSH paths plus
+OS-level timers cannot recover early-boot, root-filesystem, loader, or PID 1
+failures.
 
 ## Direct Persistent Controller Session
 
@@ -108,3 +114,8 @@ After recovery, verify the stable kernel and new boot ID, collect previous-boot
 journal/pstore/console logs and rollback evidence, classify the triggering change,
 and stop the candidate campaign until access safety is restored. Absence of a
 rollback log is not proof that the timer did not fire.
+
+If the host cannot execute init, mount its normal root, or start either SSH path,
+stop retrying OS-level recovery. Use the tested out-of-band console and
+independent rescue environment, preserve serial/reset evidence, mount storage
+read-only first, and copy diagnostics off-host before repair.

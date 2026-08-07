@@ -5,6 +5,10 @@ remote machine before building and immediately before every reboot. Store the
 probe, continuation manifest, and critical state on persistent remote storage and
 copy them to the controller.
 
+Complete [host-recovery-safety.md](host-recovery-safety.md) before any host
+mutation. Reboot readiness supplements, rather than replaces, its mandatory
+out-of-band, rescue-boot, stable-baseline, and snapshot/image recovery gates.
+
 ## Machine and Boot Prerequisites
 
 Record and verify:
@@ -18,6 +22,10 @@ Record and verify:
 - bootloader entries/default/one-shot support, stable kernel artifacts, console
   or BMC, watchdog, persistent journal/pstore, SSH/network startup, DNS/routes,
   firewall, and time synchronization;
+- externally logged out-of-band console, power/reset, firmware boot selection,
+  recovery media, independent rescue OS/initramfs, and named recovery operator;
+- baseline image or native snapshot identity, consistency point, capacity,
+  expiry, off-host metadata, and tested restoration procedure;
 - direct and reverse SSH endpoints, host keys, restricted credentials, supervised
   service ordering/restart behavior, allocated reverse port, and persistent logs;
 - CSB checkout and submodule commits/dirty state, configs, generated headers,
@@ -30,6 +38,11 @@ Check that boot-critical drivers are built in or present in the candidate
 initramfs. Verify the initramfs contains the required root-storage, filesystem,
 encryption, RAID/LVM, network, and console support. Use distribution tools to
 inspect it; do not infer contents from the build config alone.
+
+Require two clean stable boots and a successful rescue-environment boot before
+the first candidate series. Verify that rescue can activate the actual storage
+stack, mount the normal root read-only, inspect initramfs/bootloader/journal, and
+copy evidence to the controller without depending on the normal userspace.
 
 ## Volatile-State Audit
 

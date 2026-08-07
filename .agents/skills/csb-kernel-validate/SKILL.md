@@ -14,6 +14,11 @@ remote boot configuration or installing a kernel. Read
 first build and again before every reboot. Read and apply
 [references/access-safety.md](references/access-safety.md) before the first
 change to networking, SSH, bootloader, watchdog, panic, or reboot configuration.
+Read and complete
+[references/host-recovery-safety.md](references/host-recovery-safety.md) before
+the first mutation of any remote host. Perform only read-only inventory and
+non-mutating probes until its off-host gate record passes. Re-run affected gates
+whenever recovery, storage, boot, access, watchdog, or baseline state changes.
 
 ## Preconditions
 
@@ -26,6 +31,11 @@ change to networking, SSH, bootloader, watchdog, panic, or reboot configuration.
 - Record dirty state, running kernel release and build ID, bootloader, firmware,
   root filesystem, free `/boot` space, console/BMC access, watchdog capability,
   and the exact persistent stable boot entry.
+- Require proven out-of-band console, power/reset, and recovery-media control; a
+  boot-tested rescue environment independent of the normal root filesystem; two
+  clean stable baseline boots; and a verified off-host baseline plus restorable
+  native snapshot or image. If any required layer cannot be tested, stop before
+  changing the host.
 - Probe the remote machine against the reboot-readiness reference. Inventory all
   prerequisites and volatile state, move campaign-critical inputs, logs, ledgers,
   build state, credentials/configuration, and restart instructions from tmpfs or
@@ -38,9 +48,18 @@ change to networking, SSH, bootloader, watchdog, panic, or reboot configuration.
   tested, generously timed stable-kernel rollback before each risky change. Keep
   access credentials restricted and never weaken SSH or firewall policy merely
   to make the tunnel work.
+- Treat direct SSH, reverse or separately routed SSH, and out-of-band management
+  as three distinct required access layers. SSH and OS-level timers do not cover
+  failures before init, root mount, networking, or SSH startup.
 - Require a verified one-shot boot path that leaves the stable kernel as the
   persistent default. If unavailable, stop before reboot and report the missing
   recovery mechanism. A timeout alone is not recovery.
+- Separate stable-host recovery provisioning from candidate installation.
+  Candidate installers must not re-execute PID 1, first-enable or shorten a
+  watchdog, change SSH/networking, or apply live global panic policy. Prohibit
+  `systemctl daemon-reexec` and equivalent service-manager re-execution during
+  validation. Activate and load-test watchdog policy through a planned stable
+  boot before installing candidates.
 
 ## Candidate Loop
 
@@ -61,18 +80,21 @@ the user supplies another budget. For each candidate:
    logged exit statuses. Run the relevant narrow object/subsystem tests plus the
    kernel's build-time checks. Verify image, modules, initramfs, symbol/map, and
    release-name consistency before installation.
-4. **Arm access and recovery.** Verify both SSH paths from end to end, preserve
+4. **Arm access and recovery.** Verify both SSH paths and out-of-band recovery
+   from end to end, preserve
    their logs outside tmpfs, and arm the pre-change stable rollback before any
-   reboot-safety mutation. Keep the known-good kernel persistent default, install the
-   uniquely named candidate beside it, enable panic/oops reboot, configure and
-   verify a hardware watchdog when available, and prepare a post-boot bailout
-   timer. Select the candidate for one boot only. Save bootloader state and the
-   commands needed to undo every change.
+   reboot-safety mutation. Reverify the independent rescue boot and baseline
+   snapshot/image. Keep the known-good kernel persistent default, install the
+   uniquely named candidate beside it, use candidate command-line panic/oops
+   policy, verify the already provisioned and stable-load-tested watchdog, and
+   prepare a post-boot bailout timer. Select the candidate for one boot only.
+   Save bootloader state and the commands needed to undo every change.
 5. **Preflight and reboot.** Run the complete reboot-readiness and access-safety
    gates. Recheck idle
    state, stable default, candidate
    one-shot entry, filesystem health, free space, initramfs contents, root-device
-   support, network driver, SSH service, watchdog, durable logs, persistent
+   support, network driver, SSH service, watchdog, rescue boot, snapshot/image
+   rollback, out-of-band console capture, durable logs, persistent
    campaign state, both SSH paths, armed rollback/bailout state, and the tested
    post-boot continuation command. Reboot once.
    Poll with bounded reconnect attempts; use BMC/console evidence when available.
@@ -123,6 +145,7 @@ patches/          each candidate and source commit
 build/            commands, logs, exit-status ledger, artifact hashes
 boot/             preflight, bootloader state, watchdog, journal/dmesg
 access/           direct/reverse SSH probes, service state, rollback timers/logs
+recovery/         OOB proof, rescue boot, baseline backup/snapshot, restore test
 stable/           baseline results and analysis
 candidate-N/      results, analysis, refine reports, health evidence
 comparison/       A/B tables, statistics, decision and iteration ledger

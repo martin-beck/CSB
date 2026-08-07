@@ -7,6 +7,9 @@ Complete the separate reboot-readiness probe and persist all campaign-critical
 volatile state before applying this boot procedure.
 Complete the access-safety gate, including direct and reverse SSH paths plus
 pre-change and candidate-boot rollback timers, before any mutation.
+Complete [host-recovery-safety.md](host-recovery-safety.md), including proven
+out-of-band control, a boot-tested rescue environment, clean stable baseline
+boots, and verified snapshot/image recovery, before any mutation.
 
 ## Recovery Contract
 
@@ -17,7 +20,9 @@ Use all available layers:
 3. Configure reboot after panic/oops and preserve persistent kernel logs.
 4. Configure a hardware watchdog for a hard hang when `/dev/watchdog*` and a
    functioning watchdog driver exist.
-5. Prefer verified BMC, serial console, or local-console recovery.
+5. Require verified out-of-band console, power/reset, and recovery-media control.
+6. Require an independently bootable rescue environment and verified baseline
+   snapshot/image restoration path.
 
 One-shot booting makes the next reboot return to stable, but it cannot initiate a
 reboot from a hard lockup. Panic settings cannot recover a kernel that hangs before
@@ -75,6 +80,12 @@ non-destructive test procedure. Do not run a destructive watchdog test on a busy
 host. If no watchdog is available, retain one-shot fallback but label automatic
 hard-hang recovery unavailable.
 
+Provision watchdog policy separately on the stable host, activate it through a
+planned stable reboot, and load-test it before candidate installation. Never
+first-enable or shorten a watchdog in a candidate installer, and never combine
+watchdog changes with PID 1 re-execution. `systemctl daemon-reexec` and equivalent
+service-manager re-execution are prohibited during kernel validation.
+
 Use pstore/ramoops, a serial console, netconsole, or persistent journal when
 available. Verify logs survive reboot before the experiment. Never treat absent
 logs as evidence that no panic occurred.
@@ -91,6 +102,11 @@ Do not reboot until all checks pass:
 - stable is persistent default and candidate is one-shot;
 - panic/oops settings and available watchdog are verified;
 - SSH, console/BMC path, reconnect deadline, and recovery owner are recorded;
+- out-of-band console/power/recovery-media controls and external console logging
+  have been tested;
+- the independent rescue environment has been booted and used to copy read-only
+  evidence off-host;
+- a current verified baseline snapshot/image and restoration procedure exist;
 - direct reconnecting SSH and the supervised reverse tunnel pass independent
   end-to-end tests, with persistent logs and restricted credentials;
 - the current pre-change rollback and candidate-boot bailout states and deadlines
