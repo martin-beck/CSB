@@ -118,6 +118,7 @@ static inline int bm_dispatch_operation(thread_ctx_t* ctx, size_t op_id)
 memcpy((void*)(0x203af540ul+PTR_OFFSET), "#clone/#old_files\000", 18);
 	res = syscall(__NR_openat, ctx->dirfd, /*file=*/0x203af540ul+PTR_OFFSET, /*flags=O_NONBLOCK|O_CREAT*/0x840, /*mode=S_IXOTH|S_IWOTH|S_IROTH|S_IXGRP|S_IWGRP|S_IRGRP|S_IXUSR|S_IWUSR|0x100*/0x1ff);
 	if (res == -1 ) { assert(!abort_on_fail); ctx->num_failed++;} else {ctx->num_succeeded++;};
+	if (res > 2) close((int)res);
 //  openat arguments: [
 //    fd: fd_dir (resource)
 //    file: ptr[in, buffer] {
@@ -130,6 +131,7 @@ memcpy((void*)(0x203af540ul+PTR_OFFSET), "#clone/#old_files\000", 18);
 memcpy((void*)(0x203af580ul+PTR_OFFSET), "#clone/#old_files\000", 18);
 	res = syscall(__NR_openat, ctx->dirfd, /*file=*/0x203af580ul+PTR_OFFSET, /*flags=O_NONBLOCK|O_CREAT*/0x840, /*mode=S_IXOTH|S_IWOTH|S_IROTH|S_IXGRP|S_IWGRP|S_IRGRP|S_IXUSR|S_IWUSR|0x100*/0x1ff);
 	if (res == -1 ) { assert(!abort_on_fail); ctx->num_failed++;} else {ctx->num_succeeded++;};
+	if (res > 2) close((int)res);
 //  openat arguments: [
 //    fd: fd_dir (resource)
 //    file: ptr[in, buffer] {
@@ -142,5 +144,6 @@ memcpy((void*)(0x203af580ul+PTR_OFFSET), "#clone/#old_files\000", 18);
 memcpy((void*)(0x207d12c0ul+PTR_OFFSET), "#clone/#old_files\000", 18);
 	res = syscall(__NR_openat, ctx->dirfd, /*file=*/0x207d12c0ul+PTR_OFFSET, /*flags=O_NONBLOCK|O_CREAT*/0x840, /*mode=S_IXOTH|S_IWOTH|S_IROTH|S_IXGRP|S_IWGRP|S_IRGRP|S_IXUSR|S_IWUSR|0x100*/0x1ff);
 	if (res == -1 ) { assert(!abort_on_fail); ctx->num_failed++;} else {ctx->num_succeeded++;};
+	if (res > 2) close((int)res);
 	return 0;
 }

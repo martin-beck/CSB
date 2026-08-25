@@ -140,6 +140,7 @@ memcpy((void*)(0x20900280ul+PTR_OFFSET), "./tmp/rocksdb_db\000", 17);
 memcpy((void*)(0x202032c0ul+PTR_OFFSET), "./tmp/rocksdb_db\000", 17);
 	res = syscall(__NR_openat, ctx->dirfd, /*file=*/0x202032c0ul+PTR_OFFSET, /*flags=O_NONBLOCK|O_DIRECTORY*/0x4800, /*mode=S_IXOTH|S_IWOTH|S_IROTH|S_IXGRP|S_IWGRP|S_IRGRP|S_IXUSR|S_IWUSR|0x100*/0x1ff);
 	if (res == -1 ) { assert(!abort_on_fail); ctx->num_failed++;} else {ctx->num_succeeded++;};
+	if (res > 2) close((int)res);
 //  fsync arguments: [
 //    fd: fd (resource)
 //  ]

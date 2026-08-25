@@ -182,5 +182,7 @@ static inline int bm_dispatch_operation(thread_ctx_t* ctx, size_t op_id)
 	const char* reason;
 	(void)reason;
 			
+	(void)bm_target_dereg(ctx);
+	(void)bm_target_reg(ctx);
 	return 0;
 }
