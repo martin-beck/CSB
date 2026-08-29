@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <linux/mount.h>
 #include <sched.h>
 #include <stdint.h>
@@ -12,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/syscall.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -24,6 +26,8 @@ struct result {
 struct worker_state {
     unsigned int index;
     uint32_t sequence;
+    char base[PATH_MAX];
+    char new_root[PATH_MAX];
 };
 
 static double
@@ -153,6 +157,38 @@ op_proc_filesystems(struct worker_state *state)
     return n < 0 ? -1 : 0;
 }
 
+static int
+op_pivot_root(struct worker_state *state)
+{
+    pid_t pid = fork();
+    int status;
+
+    if (pid < 0)
+        return -1;
+    if (!pid) {
+        char old_root[PATH_MAX];
+        struct stat root_stat, old_stat;
+
+        if (unshare(CLONE_NEWNS) ||
+            syscall(SYS_mount, NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) ||
+            syscall(SYS_mount, "tmpfs", state->new_root, "tmpfs", 0,
+                    "size=4m") ||
+            (size_t)snprintf(old_root, sizeof(old_root), "%s/old-root",
+                             state->new_root) >= sizeof(old_root) ||
+            mkdir(old_root, 0700) || chdir(state->new_root) ||
+            syscall(SYS_pivot_root, ".", "old-root") || chdir("/") ||
+            stat("/", &root_stat) || stat("/old-root", &old_stat) ||
+            (root_stat.st_dev == old_stat.st_dev &&
+             root_stat.st_ino == old_stat.st_ino))
+            _exit(1);
+        _exit(0);
+    }
+    if (waitpid(pid, &status, 0) != pid || !WIFEXITED(status) ||
+        WEXITSTATUS(status))
+        return -1;
+    return 0;
+}
+
 static int (*select_operation(const char *test))(struct worker_state *)
 {
     if (!strcmp(test, "uid-unique"))
@@ -165,6 +201,8 @@ static int (*select_operation(const char *test))(struct worker_state *)
         return op_fsopen;
     if (!strcmp(test, "proc-filesystems"))
         return op_proc_filesystems;
+    if (!strcmp(test, "pivot-root"))
+        return op_pivot_root;
     return NULL;
 }
 
@@ -179,6 +217,16 @@ worker(unsigned int index, double deadline, int result_fd,
         result.failures++;
         goto out;
     }
+    if (operation == op_pivot_root &&
+        ((size_t)snprintf(state.base, sizeof(state.base),
+                          "/tmp/active-mm-pivot-%ld",
+                          (long)getpid()) >= sizeof(state.base) ||
+         (size_t)snprintf(state.new_root, sizeof(state.new_root), "%s/new-root",
+                          state.base) >= sizeof(state.new_root) ||
+         mkdir(state.base, 0700) || mkdir(state.new_root, 0700))) {
+        result.failures++;
+        goto out;
+    }
     while (now() < deadline) {
         if (operation(&state)) {
             result.failures++;
@@ -186,6 +234,9 @@ worker(unsigned int index, double deadline, int result_fd,
         }
         result.operations++;
     }
+    if (operation == op_pivot_root &&
+        (rmdir(state.new_root) || rmdir(state.base)))
+        result.failures++;
 out:
     if (write(result_fd, &result, sizeof(result)) != sizeof(result))
         perror("result write");
@@ -206,14 +257,14 @@ main(int argc, char **argv)
     if (argc != 4 || !(operation = select_operation(argv[1]))) {
         fprintf(stderr,
                 "usage: %s uid-unique|uid-shared|netns|fsopen|"
-                "proc-filesystems WORKERS DURATION_SECONDS\n",
+                "proc-filesystems|pivot-root WORKERS DURATION_SECONDS\n",
                 argv[0]);
         return 2;
     }
     workers  = parse_uint(argv[2], "workers");
     duration = parse_uint(argv[3], "duration");
     if ((!strncmp(argv[1], "uid-", 4) || !strcmp(argv[1], "netns") ||
-         !strcmp(argv[1], "fsopen")) &&
+         !strcmp(argv[1], "fsopen") || !strcmp(argv[1], "pivot-root")) &&
         geteuid()) {
         fprintf(stderr, "%s must run as root\n", argv[1]);
         return 2;

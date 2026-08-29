@@ -24,6 +24,9 @@ workers and five repetitions:
 - `active-mm-proc-filesystems.json` repeatedly enumerates
   `/proc/filesystems`. The last two configs target the read-mostly filesystem
   type registry through independent syscall paths.
+- `active-mm-pivot-root.json` creates private mount namespaces and pivots each
+  onto a fresh tmpfs root. It targets the system-wide `chroot_fs_refs()` scan
+  used while container runtimes install a new root filesystem.
 
 Run a config, for example, with:
 
@@ -42,6 +45,8 @@ Keep the focused result beside a relatable workload:
 - Network namespace and kernfs: `config/bm-external/cgroups/runc.json` and the
   container lifecycle harness.
 - Filesystem registry: runc/container lifecycle and `stress-ng --procfs`.
+- Pivot root: runc lifecycle and the container harness, with fork/exit as the
+  registry-maintenance no-regression control.
 
 Do not claim a real-workload improvement from an attribution benchmark alone.
 Accept a kernel change only after alternating-boot A/B runs show both a
