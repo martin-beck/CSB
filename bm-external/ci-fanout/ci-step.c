@@ -4,12 +4,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-static uint64_t rotate_left(uint64_t value, unsigned int shift)
+static uint64_t
+rotate_left(uint64_t value, unsigned int shift)
 {
     return (value << shift) | (value >> (64U - shift));
 }
 
-uint64_t validate_ci_manifest(const unsigned char *data, size_t length)
+uint64_t
+validate_ci_manifest(const unsigned char *data, size_t length)
 {
     uint64_t checksum = UINT64_C(0xcbf29ce484222325);
 

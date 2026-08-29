@@ -27,7 +27,8 @@ struct worker {
     uint64_t max_ns;
 };
 
-static uint64_t now_ns(void)
+static uint64_t
+now_ns(void)
 {
     struct timespec ts;
 
@@ -38,16 +39,17 @@ static uint64_t now_ns(void)
     return (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
 }
 
-static void *run_worker(void *argument)
+static void *
+run_worker(void *argument)
 {
     static char *const child_argv[] = {"true", NULL};
-    struct worker *worker = argument;
+    struct worker *worker           = argument;
 
     pthread_barrier_wait(worker->barrier);
     while (now_ns() < *worker->deadline_ns) {
         uint64_t start_ns = now_ns();
-        pid_t pid = fork();
-        int status = 0;
+        pid_t pid         = fork();
+        int status        = 0;
         pid_t waited;
         int failed = 0;
 
@@ -77,14 +79,16 @@ static void *run_worker(void *argument)
     return NULL;
 }
 
-static uint64_t parse_uint(const char *name, const char *text, uint64_t min, uint64_t max)
+static uint64_t
+parse_uint(const char *name, const char *text, uint64_t min, uint64_t max)
 {
     char *end = NULL;
     unsigned long long value;
 
     errno = 0;
     value = strtoull(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0' || value < min || value > max) {
+    if (errno != 0 || end == text || *end != '\0' || value < min ||
+        value > max) {
         fprintf(stderr, "%s must be an integer in [%" PRIu64 ", %" PRIu64 "]\n",
                 name, min, max);
         exit(2);
@@ -92,25 +96,28 @@ static uint64_t parse_uint(const char *name, const char *text, uint64_t min, uin
     return (uint64_t)value;
 }
 
-static double parse_duration(const char *text)
+static double
+parse_duration(const char *text)
 {
     char *end = NULL;
     double value;
 
     errno = 0;
     value = strtod(text, &end);
-    if (errno != 0 || end == text || *end != '\0' || value < 0.1 || value > 3600.0) {
+    if (errno != 0 || end == text || *end != '\0' || value < 0.1 ||
+        value > 3600.0) {
         fputs("--duration must be in [0.1, 3600] seconds\n", stderr);
         exit(2);
     }
     return value;
 }
 
-int main(int argc, char **argv)
+int
+main(int argc, char **argv)
 {
     uint64_t worker_count = 1;
-    uint64_t memory_mib = 256;
-    double duration = 10.0;
+    uint64_t memory_mib   = 256;
+    double duration       = 10.0;
     pthread_barrier_t barrier;
     pthread_t *threads;
     struct worker *workers;
@@ -119,13 +126,15 @@ int main(int argc, char **argv)
     uint64_t start_ns;
     uint64_t end_ns;
     uint64_t completed = 0;
-    uint64_t failures = 0;
-    uint64_t total_ns = 0;
-    uint64_t max_ns = 0;
+    uint64_t failures  = 0;
+    uint64_t total_ns  = 0;
+    uint64_t max_ns    = 0;
 
     for (int i = 1; i < argc; i++) {
         if (i + 1 >= argc) {
-            fprintf(stderr, "Usage: %s --workers N --duration SEC --memory-mib N\n", argv[0]);
+            fprintf(stderr,
+                    "Usage: %s --workers N --duration SEC --memory-mib N\n",
+                    argv[0]);
             return 2;
         }
         if (strcmp(argv[i], "--workers") == 0)
@@ -159,12 +168,13 @@ int main(int argc, char **argv)
         perror("calloc");
         return 1;
     }
-    if (pthread_barrier_init(&barrier, NULL, (unsigned int)worker_count + 1) != 0) {
+    if (pthread_barrier_init(&barrier, NULL, (unsigned int)worker_count + 1) !=
+        0) {
         fputs("pthread_barrier_init failed\n", stderr);
         return 1;
     }
     for (uint64_t i = 0; i < worker_count; i++) {
-        workers[i].barrier = &barrier;
+        workers[i].barrier     = &barrier;
         workers[i].deadline_ns = &deadline_ns;
         if (pthread_create(&threads[i], NULL, run_worker, &workers[i]) != 0) {
             fputs("pthread_create failed\n", stderr);
@@ -172,7 +182,7 @@ int main(int argc, char **argv)
         }
     }
 
-    start_ns = now_ns();
+    start_ns    = now_ns();
     deadline_ns = start_ns + (uint64_t)(duration * 1000000000.0);
     pthread_barrier_wait(&barrier);
     for (uint64_t i = 0; i < worker_count; i++) {
@@ -185,10 +195,11 @@ int main(int argc, char **argv)
     }
     end_ns = now_ns();
 
-    double elapsed = (double)(end_ns - start_ns) / 1000000000.0;
+    double elapsed    = (double)(end_ns - start_ns) / 1000000000.0;
     uint64_t attempts = completed + failures;
     double throughput = elapsed > 0.0 ? (double)completed / elapsed : 0.0;
-    double mean_us = attempts > 0 ? (double)total_ns / (double)attempts / 1000.0 : 0.0;
+    double mean_us =
+        attempts > 0 ? (double)total_ns / (double)attempts / 1000.0 : 0.0;
 
     printf("fork_execs_per_second=%.6f;completed=%" PRIu64 ";failures=%" PRIu64
            ";elapsed_seconds=%.6f;mean_fork_exec_us=%.3f;max_fork_exec_us=%.3f"

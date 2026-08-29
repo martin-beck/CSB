@@ -30,14 +30,22 @@
     },
     "threads": {
       "values": [
-        [1, 8, 32, 64, 128]
+        [
+          1,
+          8,
+          32,
+          64,
+          128
+        ]
       ]
     }
   },
   "containers": {
     "container_list": {
       "values": [
-        [1]
+        [
+          1
+        ]
       ]
     },
     "core_count": 128,
