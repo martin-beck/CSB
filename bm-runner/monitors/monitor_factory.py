@@ -11,6 +11,7 @@ from monitors.monitor import Monitor
 from monitors.perfstat import PerfStat
 from monitors.perflock import PerfLock
 from monitors.bpftrace import BpfTrace
+from monitors.kernel_anomaly import KernelAnomaly
 from utils.logger import bm_log, LogType
 import sys
 from config.env_config import EnvUniversalConfig, UniversalConfig
@@ -39,11 +40,17 @@ class DummyMonitor(Monitor):
 class MonitorFactory:
     @staticmethod
     def create(monitor_type: MonitorType, results_dir, args) -> Monitor:
+        # Kernel anomaly detection is a correctness gate rather than optional
+        # performance analysis, so CSB_ANALYZE=false must not disable it.
+        if monitor_type == MonitorType.KERNEL_ANOMALY:
+            return KernelAnomaly(output_dir=results_dir, args=args)
         # if the user has requested to disable the monitors,
         # we return a dummy monitor that does nothing,
         # so that the rest of the code can remain unchanged
         if not EnvUniversalConfig.is_on(UniversalConfig.CSB_ANALYZE):
-            return DummyMonitor(name=f"{monitor_type}")  # Return a dummy monitor that does nothing
+            return DummyMonitor(
+                name=f"{monitor_type}"
+            )  # Return a dummy monitor that does nothing
         match monitor_type:
             case MonitorType.MPSTAT:
                 return SystemStats(output_dir=results_dir, args=args)

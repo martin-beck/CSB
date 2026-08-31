@@ -81,6 +81,21 @@ When adding or changing a config field, update the matching class under
 `bm-runner/config/`, the parsing/defaults, `doc/bm-config.md`, and tests under
 `bm-runner/tests/`.
 
+For kernel scalability work, add the correctness monitor to the benchmark
+configuration:
+
+```json
+"monitors": {
+  "kernel_anomaly": []
+}
+```
+
+It snapshots the kernel-journal cursor immediately before the workload and
+examines only newer records after cleanup. Soft-lockup and `list_add corruption`
+messages invalidate the run and remain available in the result directory. The
+monitor fails closed when `journalctl` is unavailable or the kernel journal is
+not readable, and it is intentionally not disabled by `CSB_ANALYZE=false`.
+
 ## Configuring benchmarking workload.
 
 The unit of execution for CSB framework is a benchmark, which is configured with JSON files available in the `config/` directory.

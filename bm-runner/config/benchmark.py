@@ -21,7 +21,9 @@ class ExecutionType(str, Enum):
     """
 
     NATIVE = "native"  # indicates that the benchmark should run natively
-    CONTAINER = "container"  # indicates that the benchmark should run inside the container
+    CONTAINER = (
+        "container"  # indicates that the benchmark should run inside the container
+    )
     BWRAP = "bwrap"  # indicates that the benchmark should run with bubblewrap
 
 
@@ -47,6 +49,7 @@ class MonitorType(str, Enum):
     PERF_STAT: Runs perf stat.
     PERF_LOCK: Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points. Note that `perf_lock` monitor invokes `perf` monitor even if it was not added by the user. Also when tracepoint events are configured, incompatible frequency arguments (`-F <freq>`, `-F<freq>`,`--freq <freq>`, and `--freq=<freq>`) are automatically removed.
     BPF_TRACE: Runs [bpftrace](https://bpftrace.org/docs/release_025/stdlib) with the given programs. Users may list programs from scripts/bpftrace. Giving multiple programs as arguments, will result in launching multiple instances of bpftrace.
+    KERNEL_ANOMALY: Fails the run when the kernel journal reports a soft lockup or list_add corruption during the benchmark.
     """
 
     MPSTAT = "mpstat"
@@ -57,6 +60,7 @@ class MonitorType(str, Enum):
     PERF_STAT = "perf_stat"
     PERF_LOCK = "perf_lock"
     BPF_TRACE = "bpftrace"
+    KERNEL_ANOMALY = "kernel_anomaly"
 
 
 class BenchmarkConfig(dict):
