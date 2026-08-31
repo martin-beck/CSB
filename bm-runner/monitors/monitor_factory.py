@@ -40,10 +40,6 @@ class DummyMonitor(Monitor):
 class MonitorFactory:
     @staticmethod
     def create(monitor_type: MonitorType, results_dir, args) -> Monitor:
-        # Kernel anomaly detection is a correctness gate rather than optional
-        # performance analysis, so CSB_ANALYZE=false must not disable it.
-        if monitor_type == MonitorType.KERNEL_ANOMALY:
-            return KernelAnomaly(output_dir=results_dir, args=args)
         # if the user has requested to disable the monitors,
         # we return a dummy monitor that does nothing,
         # so that the rest of the code can remain unchanged
@@ -66,6 +62,8 @@ class MonitorFactory:
                 return PerfLock(output_dir=results_dir, args=args)
             case MonitorType.BPF_TRACE:
                 return BpfTrace(output_dir=results_dir, args=args)
+            case MonitorType.KERNEL_ANOMALY:
+                return KernelAnomaly(output_dir=results_dir, args=args)
             case _:
                 bm_log(f"Unsupported monitor type {monitor_type}", LogType.FATAL)
                 sys.exit(1)

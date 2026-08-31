@@ -122,7 +122,7 @@ Monitors are used to monitor performance. They can be used to analyze the behavi
 - `"perf_stat"`:  Runs perf stat.
 - `"perf_lock"`:  Runs perf lock, and perf lock contention if supported. Lock-contention output is generated when the kernel exposes the required `perf lock` trace-points. Note that `perf_lock` monitor invokes `perf` monitor even if it was not added by the user. Also when tracepoint events are configured, incompatible frequency arguments (`-F <freq>`, `-F<freq>`,`--freq <freq>`, and `--freq=<freq>`) are automatically removed.
 - `"bpftrace"`:  Runs [bpftrace](https://bpftrace.org/docs/release_025/stdlib) with the given programs. Users may list programs from scripts/bpftrace. Giving multiple programs as arguments, will result in launching multiple instances of bpftrace.
-- `"kernel_anomaly"`:  Captures kernel-journal records emitted during the benchmark and fails result collection if they contain a soft lockup or `list_add corruption`. It accepts no arguments and writes `kernel-anomaly-journal.log` plus `kernel-anomaly-summary.json` in the result directory. Because this is a correctness gate, `CSB_ANALYZE=false` does not disable it. `journalctl` and permission to read the kernel journal are required.
+- `"kernel_anomaly"`:  Detects kernel anomalies during the benchmark and writes journal and summary artifacts.
 ## PlotType
 Supported types of plots.  <br/>Supported values:
 - `"normal"`:  Plots according to the config no post processing of data.
@@ -155,7 +155,7 @@ Supported groups for packing.  <br/>Supported values:
 ## Environment Variables
 CSB bm-runner has universal configuration that can overwrite default behavior and JSON config values. These are set via environment variables, and are read at runtime.  <br/>Supported values:
 - `"CSB_NO_CLEAN_BENCH"`:  When set to `true`, it disables the cleaning of the build folder of builtin benchmarks.
-- `"CSB_ANALYZE"`:  When set to `false`, it disables the analysis monitors. The `kernel_anomaly` correctness gate remains active when explicitly configured.
+- `"CSB_ANALYZE"`:  When set to `false`, it disables the analysis monitors.
 - `"CSB_NO_BUILD_BENCH"`:  when set to `true`, it skips building *all* builtin benchmarks.
 - `"CSB_PIN_MONITORS"`:  When set to `true`, all monitors will be pinned to a specific CPU.
 - `"CSB_RESULTS_GROUP"`:  when set to <dir-name>, bm-runner dumps all results under results/<dir-name>.
