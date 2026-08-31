@@ -20,10 +20,7 @@ def test_classify_detects_soft_lockup_and_list_add_corruption():
 
 
 def test_parse_cursor_uses_last_cursor():
-    assert (
-        KernelAnomaly.parse_cursor("-- cursor: first\nmessage\n-- cursor: second\n")
-        == "second"
-    )
+    assert KernelAnomaly.parse_cursor("-- cursor: first\nmessage\n-- cursor: second\n") == "second"
 
 
 def test_monitor_records_only_messages_after_start(tmp_path, monkeypatch):
@@ -34,9 +31,7 @@ def test_monitor_records_only_messages_after_start(tmp_path, monkeypatch):
             "-- cursor: after\n",
         ]
     )
-    monkeypatch.setattr(
-        KernelAnomaly, "_journalctl", staticmethod(lambda _args: next(outputs))
-    )
+    monkeypatch.setattr(KernelAnomaly, "_journalctl", staticmethod(lambda _args: next(outputs)))
     monitor = KernelAnomaly(tmp_path, [])
 
     monitor.start()
@@ -52,14 +47,10 @@ def test_monitor_records_only_messages_after_start(tmp_path, monkeypatch):
 
 def test_clean_monitor_exports_zero_metrics(tmp_path, monkeypatch):
     outputs = iter(["-- cursor: before\n", "kernel: ordinary\n-- cursor: after\n"])
-    monkeypatch.setattr(
-        KernelAnomaly, "_journalctl", staticmethod(lambda _args: next(outputs))
-    )
+    monkeypatch.setattr(KernelAnomaly, "_journalctl", staticmethod(lambda _args: next(outputs)))
     monitor = KernelAnomaly(tmp_path, [])
 
     monitor.start()
     monitor.stop()
 
-    assert monitor.collect_results() == (
-        "kernel_soft_lockups=0;kernel_list_add_corruptions=0;"
-    )
+    assert monitor.collect_results() == ("kernel_soft_lockups=0;kernel_list_add_corruptions=0;")

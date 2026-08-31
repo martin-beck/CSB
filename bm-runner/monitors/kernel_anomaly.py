@@ -59,9 +59,7 @@ class KernelAnomaly(Monitor):
                 text=True,
             )
         except FileNotFoundError as exc:
-            raise RuntimeError(
-                "journalctl is required for kernel anomaly detection"
-            ) from exc
+            raise RuntimeError("journalctl is required for kernel anomaly detection") from exc
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip()
             raise RuntimeError(f"journalctl failed: {detail}")
@@ -89,9 +87,7 @@ class KernelAnomaly(Monitor):
             )
             end_cursor = self.parse_cursor(output)
             journal = "\n".join(
-                line
-                for line in output.splitlines()
-                if not line.startswith(self.CURSOR_PREFIX)
+                line for line in output.splitlines() if not line.startswith(self.CURSOR_PREFIX)
             )
             if journal:
                 journal += "\n"
@@ -104,9 +100,7 @@ class KernelAnomaly(Monitor):
                 "matches": self.matches,
                 "status": "failed" if any(self.matches.values()) else "clean",
             }
-            self.summary_path.write_text(
-                json.dumps(summary, indent=2, sort_keys=True) + "\n"
-            )
+            self.summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
             self.cursor = end_cursor
         except Exception as exc:
             # Monitor.stop() runs inside framework cleanup. Preserve the error
@@ -135,9 +129,7 @@ class KernelAnomaly(Monitor):
         counts = {name: len(self.matches[name]) for name in self.PATTERNS}
         if any(counts.values()):
             detail = ", ".join(f"{name}={count}" for name, count in counts.items())
-            raise RuntimeError(
-                f"kernel anomaly detected ({detail}); see {self.summary_path}"
-            )
+            raise RuntimeError(f"kernel anomaly detected ({detail}); see {self.summary_path}")
         return (
             f"kernel_soft_lockups={counts['soft_lockup']};"
             f"kernel_list_add_corruptions={counts['list_add_corruption']};"

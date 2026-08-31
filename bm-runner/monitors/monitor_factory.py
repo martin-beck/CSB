@@ -48,9 +48,7 @@ class MonitorFactory:
         # we return a dummy monitor that does nothing,
         # so that the rest of the code can remain unchanged
         if not EnvUniversalConfig.is_on(UniversalConfig.CSB_ANALYZE):
-            return DummyMonitor(
-                name=f"{monitor_type}"
-            )  # Return a dummy monitor that does nothing
+            return DummyMonitor(name=f"{monitor_type}")  # Return a dummy monitor that does nothing
         match monitor_type:
             case MonitorType.MPSTAT:
                 return SystemStats(output_dir=results_dir, args=args)
